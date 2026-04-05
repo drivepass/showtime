@@ -38,7 +38,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cookie: {
         secure: app.get("env") === "production",
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: app.get("env") === "production" ? "none" as const : "lax",
         maxAge: 24 * 60 * 60 * 1000,
       },
     })

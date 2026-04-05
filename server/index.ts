@@ -5,7 +5,7 @@ import { registerRoutes } from "./routes";
 const app = express();
 
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:5175",
+  origin: process.env.CORS_ORIGIN?.split(",").map(s => s.trim()) || "http://localhost:5175",
   credentials: true,
 }));
 app.use(express.json());
