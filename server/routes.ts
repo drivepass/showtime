@@ -1,0 +1,1039 @@
+import type { Express, Request, Response } from "express";
+import { createServer, type Server } from "http";
+import session from "express-session";
+import crypto from "crypto";
+import { navoriLogin, navoriGetGroups, navoriGetPlayers, navoriGetPlayersById, navoriGetFolders, navoriGetMedias, navoriGetMediasById, navoriGetTemplates, navoriGetTemplatesById, navoriGetPlaylists, navoriGetPlaylistsById, navoriSetPlaylists, navoriSetPlaylistContents, navoriGetPlaylistContents, navoriGetContentWindow, navoriGetTimeSlots, navoriSetTimeSlots, navoriDeleteTimeSlots } from "./navori";
+import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport } from "./navori";
+import { generateCreative, pollVideoResult, addGeneration, updateGeneration, getHistory, requiresTextRendering } from "./aiStudio";
+
+function handleNavoriResult(req: Request, res: Response, result: { success: boolean; error?: string }, dataKey: string, data: any) {
+  if (!result.success) {
+    if (result.error === "NOT_AUTHORIZED") {
+      return res.status(403).json({ message: "Not authorized for this resource" });
+    }
+    return res.status(502).json({ message: result.error });
+  }
+  return res.json({ [dataKey]: data });
+}
+
+declare module "express-session" {
+  interface SessionData {
+    navoriToken?: string;
+    username?: string;
+  }
+}
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+
+  app.set("trust proxy", 1);
+
+  app.use(
+    session({
+      secret: sessionSecret,
+      name: "navori.sid",
+      resave: false,
+      saveUninitialized: false,
+      rolling: true,
+      cookie: {
+        secure: app.get("env") === "production",
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 24 * 60 * 60 * 1000,
+      },
+    })
+  );
+
+  app.post("/api/auth/login", async (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ message: "Username and password are required" });
+    }
+
+    let result;
+    try {
+      result = await navoriLogin(username, password);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach authentication service" });
+    }
+
+    if (!result.success) {
+      return res.status(401).json({ message: result.error || "Authentication failed" });
+    }
+
+    req.session.navoriToken = result.token;
+    req.session.username = username;
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        return res.status(500).json({ message: "Session error" });
+      }
+      return res.json({ user: { username }, token: result.token });
+    });
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.clearCookie("navori.sid");
+      return res.json({ message: "Logged out" });
+    });
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    if (req.session.navoriToken && req.session.username) {
+      return res.json({ user: { username: req.session.username }, token: req.session.navoriToken });
+    }
+    return res.status(401).json({ message: "Not authenticated" });
+  });
+
+  app.get("/api/groups", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const filter = req.query.filter as string | undefined;
+
+    try {
+      const result = await navoriGetGroups(req.session.navoriToken, filter);
+      if (!result.success && result.error === "NOT_AUTHORIZED") {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired. Please log in again." });
+      }
+      return handleNavoriResult(req, res, result, "groups", result.groups);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.get("/api/players", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const filter = req.query.filter as string | undefined;
+
+    try {
+      const result = await navoriGetPlayers(req.session.navoriToken, filter);
+      if (!result.success && result.error === "NOT_AUTHORIZED") {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired. Please log in again." });
+      }
+      return handleNavoriResult(req, res, result, "players", result.players);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/players/details", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "Player IDs are required" });
+    }
+
+    try {
+      const result = await navoriGetPlayersById(req.session.navoriToken, ids);
+      return handleNavoriResult(req, res, result, "players", result.players);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/content-window", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { groupId, folderId, folderType, filter } = req.body;
+    if (!Number.isFinite(groupId) || groupId <= 0) {
+      return res.status(400).json({ message: "Valid groupId is required" });
+    }
+    if (!Number.isFinite(folderId)) {
+      return res.status(400).json({ message: "Valid folderId is required" });
+    }
+
+    try {
+      const result = await navoriGetContentWindow(req.session.navoriToken, groupId, folderId, folderType || 1, filter);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          return res.status(403).json({ message: "Session expired" });
+        }
+        return res.status(502).json({ message: result.error || "Navori API error" });
+      }
+      return res.json({
+        medias: result.medias || [],
+        templates: result.templates || [],
+        folders: result.folders || [],
+        feeds: result.feeds || [],
+        banners: result.banners || [],
+      });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.get("/api/folders", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const groupId = parseInt(req.query.groupId as string);
+    const filter = typeof req.query.filter === "string" ? req.query.filter : undefined;
+    if (!Number.isFinite(groupId) || groupId <= 0) {
+      return res.status(400).json({ message: "Valid groupId is required" });
+    }
+
+    try {
+      const result = await navoriGetFolders(req.session.navoriToken, groupId, filter);
+
+      if (result.success) {
+        return res.json({ folders: result.folders || [] });
+      }
+
+      if (result.error === "NOT_AUTHORIZED") {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired. Please log in again." });
+      }
+
+      const fallback = await navoriGetContentWindow(req.session.navoriToken, groupId, 0, 1, filter);
+      if (fallback.success) {
+        return res.json({ folders: fallback.folders || [] });
+      }
+
+      if (fallback.error === "NOT_AUTHORIZED") {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired. Please log in again." });
+      }
+
+      return res.status(502).json({ message: result.error || fallback.error || "Unable to fetch folders" });
+    } catch (error: any) {
+      return res.status(502).json({ message: error?.message || "Unable to reach Navori API" });
+    }
+  });
+
+  app.get("/api/medias", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const groupId = parseInt(req.query.groupId as string);
+    if (!Number.isFinite(groupId) || groupId <= 0) {
+      return res.status(400).json({ message: "Valid groupId is required" });
+    }
+
+    const filter = req.query.filter as string | undefined;
+    const folderId = req.query.folderId ? parseInt(req.query.folderId as string) : undefined;
+
+    try {
+      const result = await navoriGetMedias(req.session.navoriToken, groupId, filter, folderId);
+      return handleNavoriResult(req, res, result, "medias", result.medias);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/medias/details", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0 || ids.length > 100) {
+      return res.status(400).json({ message: "Valid media IDs array required (1-100 items)" });
+    }
+    const numericIds = ids.filter((id: any) => typeof id === "number" && Number.isFinite(id) && id > 0);
+    if (numericIds.length !== ids.length) {
+      return res.status(400).json({ message: "All IDs must be positive numbers" });
+    }
+
+    try {
+      const result = await navoriGetMediasById(req.session.navoriToken, ids);
+      return handleNavoriResult(req, res, result, "medias", result.medias);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/medias/set", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { medias } = req.body;
+    if (!medias || !Array.isArray(medias) || medias.length === 0 || medias.length > 100) {
+      return res.status(400).json({ message: "Valid medias array required (1-100 items)" });
+    }
+
+    try {
+      const result = await navoriSetMedias(req.session.navoriToken, medias);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to save medias" });
+      }
+      return res.json({ success: true, medias: result.medias || [] });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.get("/api/templates", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const groupId = parseInt(req.query.groupId as string);
+    if (!Number.isFinite(groupId) || groupId <= 0) {
+      return res.status(400).json({ message: "Valid groupId is required" });
+    }
+
+    try {
+      const folderId = req.query.folderId ? parseInt(req.query.folderId as string) : undefined;
+      const result = await navoriGetTemplates(req.session.navoriToken, groupId, undefined, folderId);
+      return handleNavoriResult(req, res, result, "templates", result.templates);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/templates/details", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0 || ids.length > 100) {
+      return res.status(400).json({ message: "Valid template IDs array required (1-100 items)" });
+    }
+    const numericIds = ids.filter((id: any) => typeof id === "number" && Number.isFinite(id) && id > 0);
+    if (numericIds.length !== ids.length) {
+      return res.status(400).json({ message: "All IDs must be positive numbers" });
+    }
+
+    try {
+      const result = await navoriGetTemplatesById(req.session.navoriToken, ids);
+      return handleNavoriResult(req, res, result, "templates", result.templates);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/templates/set", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { templates } = req.body;
+    if (!templates || !Array.isArray(templates) || templates.length === 0 || templates.length > 100) {
+      return res.status(400).json({ message: "Valid templates array required (1-100 items)" });
+    }
+
+    try {
+      const result = await navoriSetTemplates(req.session.navoriToken, templates);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to save templates" });
+      }
+      return res.json({ success: true, templates: result.templates || [] });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/medias/delete", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    const { medias } = req.body;
+    if (!medias || !Array.isArray(medias) || medias.length === 0) {
+      return res.status(400).json({ message: "Valid medias array required" });
+    }
+    try {
+      const result = await navoriDeleteMedias(req.session.navoriToken, medias);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to delete medias" });
+      }
+      return res.json({ success: true });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/medias/copy", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    const { idList, groupId, folderId } = req.body;
+    if (!idList || !Array.isArray(idList) || idList.length === 0) {
+      return res.status(400).json({ message: "Valid idList array required" });
+    }
+    if (!groupId || !Number.isFinite(groupId) || groupId <= 0) {
+      return res.status(400).json({ message: "Valid groupId required" });
+    }
+    try {
+      const result = await navoriCopyMedias(req.session.navoriToken, idList, groupId, folderId || 0);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to copy medias" });
+      }
+      return res.json({ success: true });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/templates/delete", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    const { templates } = req.body;
+    if (!templates || !Array.isArray(templates) || templates.length === 0) {
+      return res.status(400).json({ message: "Valid templates array required" });
+    }
+    try {
+      const result = await navoriDeleteTemplates(req.session.navoriToken, templates);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to delete templates" });
+      }
+      return res.json({ success: true });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/templates/copy", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    const { idList, groupId, folderId } = req.body;
+    if (!idList || !Array.isArray(idList) || idList.length === 0) {
+      return res.status(400).json({ message: "Valid idList array required" });
+    }
+    if (!groupId || !Number.isFinite(groupId) || groupId <= 0) {
+      return res.status(400).json({ message: "Valid groupId required" });
+    }
+    try {
+      const result = await navoriCopyTemplates(req.session.navoriToken, idList, groupId, folderId || 0);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to copy templates" });
+      }
+      return res.json({ success: true });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/medias/upload", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    const contentType = req.headers["content-type"] || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return res.status(400).json({ message: "Multipart form data required" });
+    }
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", async () => {
+      const body = Buffer.concat(chunks);
+      try {
+        const response = await fetch("https://saas.navori.com/NavoriService/api/UploadFile", {
+          method: "POST",
+          headers: {
+            "Content-Type": contentType,
+            "Token": req.session.navoriToken!,
+          },
+          body,
+        });
+        let data: any;
+        try { data = await response.json(); } catch { data = { Status: response.ok ? "SUCCESS" : "FAILED" }; }
+        if (data.Status === "SUCCESS" || response.ok) {
+          return res.json({ success: true, media: data.Media || data });
+        }
+        return res.status(502).json({ message: data.Status || "Upload failed" });
+      } catch {
+        return res.status(502).json({ message: "Unable to reach Navori API" });
+      }
+    });
+    req.on("error", () => res.status(502).json({ message: "Request error during upload" }));
+  });
+
+  app.get("/api/playlists", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const groupId = parseInt(req.query.groupId as string);
+    if (!Number.isFinite(groupId) || groupId <= 0) {
+      return res.status(400).json({ message: "Valid groupId is required" });
+    }
+
+    try {
+      const result = await navoriGetPlaylists(req.session.navoriToken, groupId);
+      return handleNavoriResult(req, res, result, "playlists", result.playlists);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/playlists/details", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0 || ids.length > 100) {
+      return res.status(400).json({ message: "Valid playlist IDs array required (1-100 items)" });
+    }
+    const numericIds = ids.filter((id: any) => typeof id === "number" && Number.isFinite(id) && id > 0);
+    if (numericIds.length !== ids.length) {
+      return res.status(400).json({ message: "All IDs must be positive numbers" });
+    }
+
+    try {
+      const result = await navoriGetPlaylistsById(req.session.navoriToken, ids);
+      return handleNavoriResult(req, res, result, "playlists", result.playlists);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/playlists/set", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { playlists } = req.body;
+    if (!playlists || !Array.isArray(playlists) || playlists.length === 0 || playlists.length > 100) {
+      return res.status(400).json({ message: "Valid playlists array required (1-100 items)" });
+    }
+
+    try {
+      const result = await navoriSetPlaylists(req.session.navoriToken, playlists);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to save playlists" });
+      }
+      return res.json({ success: true, playlists: result.playlists || [] });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/playlists/contents/set", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { contents } = req.body;
+    if (!contents || !Array.isArray(contents) || contents.length === 0 || contents.length > 500) {
+      return res.status(400).json({ message: "Valid contents array required (1-500 items)" });
+    }
+
+    for (const content of contents) {
+      if (!Number.isFinite(content?.PlaylistId) || content.PlaylistId <= 0) {
+        return res.status(400).json({ message: "Each content item must include a valid PlaylistId" });
+      }
+      if (!Number.isFinite(content?.ContentId) || content.ContentId <= 0) {
+        return res.status(400).json({ message: "Each content item must include a valid ContentId" });
+      }
+      if (content?.Type !== "Media" && content?.Type !== "Template") {
+        return res.status(400).json({ message: 'Each content item Type must be either "Media" or "Template"' });
+      }
+    }
+
+    try {
+      const result = await navoriSetPlaylistContents(req.session.navoriToken, contents);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to save playlist contents" });
+      }
+      return res.json({ success: true });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.get("/api/playlists/:playlistId/contents", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const playlistId = parseInt(req.params.playlistId);
+    if (!Number.isFinite(playlistId) || playlistId <= 0) {
+      return res.status(400).json({ message: "Valid playlistId is required" });
+    }
+
+    try {
+      const result = await navoriGetPlaylistContents(req.session.navoriToken, playlistId);
+      return handleNavoriResult(req, res, result, "contents", result.contents);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/timeslots", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { groupId, fromDate, toDate } = req.body;
+    if (!Number.isFinite(groupId) || groupId <= 0) {
+      return res.status(400).json({ message: "Valid groupId is required" });
+    }
+
+    try {
+      const result = await navoriGetTimeSlots(req.session.navoriToken, groupId, fromDate, toDate);
+      return handleNavoriResult(req, res, result, "timeslots", result.timeslots);
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/timeslots/set", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { timeslots } = req.body;
+    if (!timeslots || !Array.isArray(timeslots) || timeslots.length === 0 || timeslots.length > 500) {
+      return res.status(400).json({ message: "Valid timeslots array required (1-500 items)" });
+    }
+
+    for (const slot of timeslots) {
+      if (!Number.isFinite(slot?.GroupId) || slot.GroupId <= 0) {
+        return res.status(400).json({ message: "Each time slot must include a valid GroupId" });
+      }
+    }
+
+    try {
+      const result = await navoriSetTimeSlots(req.session.navoriToken, timeslots);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to save time slots" });
+      }
+      return res.json({ success: true, timeslots: result.timeslots || [] });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/timeslots/delete", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { timeSlotIds } = req.body;
+    if (!timeSlotIds || !Array.isArray(timeSlotIds) || timeSlotIds.length === 0 || timeSlotIds.length > 500) {
+      return res.status(400).json({ message: "Valid timeSlotIds array required (1-500 items)" });
+    }
+
+    for (const id of timeSlotIds) {
+      if (!Number.isFinite(id) || id <= 0) {
+        return res.status(400).json({ message: "Each time slot ID must be a positive number" });
+      }
+    }
+
+    try {
+      const result = await navoriDeleteTimeSlots(req.session.navoriToken, timeSlotIds);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to delete time slots" });
+      }
+      return res.json({ success: true });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/player-control/publish", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { groupId, playerIds } = req.body;
+    if (!Number.isFinite(groupId) || groupId <= 0) {
+      return res.status(400).json({ message: "Valid groupId is required" });
+    }
+    if (playerIds && (!Array.isArray(playerIds) || playerIds.some((id: any) => !Number.isFinite(id) || id <= 0))) {
+      return res.status(400).json({ message: "playerIds must be an array of positive numbers" });
+    }
+
+    try {
+      const result = await navoriPublishContent(req.session.navoriToken, groupId, playerIds);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to publish content" });
+      }
+      return res.json({ success: true });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/player-control/trigger", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { playerId, contentId, contentType } = req.body;
+    if (!Number.isFinite(playerId) || playerId <= 0) {
+      return res.status(400).json({ message: "Valid playerId is required" });
+    }
+    if (!Number.isFinite(contentId) || contentId <= 0) {
+      return res.status(400).json({ message: "Valid contentId is required" });
+    }
+    if (!contentType || typeof contentType !== "string") {
+      return res.status(400).json({ message: "contentType is required" });
+    }
+
+    try {
+      const result = await navoriTriggerContent(req.session.navoriToken, playerId, contentId, contentType);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to trigger content" });
+      }
+      return res.json({ success: true });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/player-control/remote-settings", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { playerIds, action, groupId } = req.body;
+    if (!playerIds || !Array.isArray(playerIds) || playerIds.length === 0) {
+      return res.status(400).json({ message: "playerIds array is required" });
+    }
+    for (const id of playerIds) {
+      if (!Number.isFinite(id) || id <= 0) {
+        return res.status(400).json({ message: "Each player ID must be a positive number" });
+      }
+    }
+    if (!action || typeof action !== "string") {
+      return res.status(400).json({ message: "action is required (e.g. DisplayOn, DisplayOff, Reboot)" });
+    }
+
+    const validActions = ["DisplayOn", "DisplayOff", "Reboot", "Restart", "Screenshot", "ClearCache"];
+    if (!validActions.includes(action)) {
+      return res.status(400).json({ message: "Invalid action. Must be one of: " + validActions.join(", ") });
+    }
+
+    try {
+      const result = await navoriRemoteSettings(req.session.navoriToken, playerIds, action, groupId);
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
+        return res.status(502).json({ message: result.error || "Unable to apply remote settings" });
+      }
+      return res.json({ success: true });
+    } catch {
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
+  app.post("/api/reports/content", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { groupId, dateFrom, dateTo, aggregation, playedInFull, search } = req.body;
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ message: "dateFrom and dateTo are required" });
+    }
+
+    try {
+      const result = await navoriGetContentReport(req.session.navoriToken, {
+        ...(groupId ? { GroupId: groupId } : {}),
+        DateFrom: dateFrom,
+        DateTo: dateTo,
+        ...(aggregation ? { Aggregation: aggregation } : {}),
+        ...(playedInFull && playedInFull !== "All" ? { PlayedInFull: playedInFull } : {}),
+        ...(search ? { Search: search } : {}),
+      });
+
+      if (result.Status === "NOT_AUTHORIZED") {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      return res.json(result);
+    } catch {
+      return res.status(502).json({ message: "Unable to fetch content report" });
+    }
+  });
+
+  app.post("/api/reports/audience", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { groupId, dateFrom, dateTo, search } = req.body;
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ message: "dateFrom and dateTo are required" });
+    }
+
+    try {
+      const result = await navoriGetAudienceReport(req.session.navoriToken, {
+        ...(groupId ? { GroupId: groupId } : {}),
+        DateFrom: dateFrom,
+        DateTo: dateTo,
+        ...(search ? { Search: search } : {}),
+      });
+
+      if (result.Status === "NOT_AUTHORIZED") {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired" });
+      }
+
+      return res.json(result);
+    } catch {
+      return res.status(502).json({ message: "Unable to fetch audience report" });
+    }
+  });
+
+  app.get("/api/thumbnail/*", async (req, res) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const thumbnailPath = (req.params as Record<string, string>)[0];
+    if (!thumbnailPath) {
+      return res.status(400).json({ message: "Thumbnail path required" });
+    }
+
+    try {
+      const navoriUrl = `https://saas.navori.com/NavoriService/MediaUpload.aspx?key=${encodeURIComponent(thumbnailPath)}`;
+      const response = await fetch(navoriUrl, {
+        headers: { "Token": req.session.navoriToken! },
+      });
+
+      if (!response.ok) {
+        return res.status(response.status).end();
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("image") || contentType.includes("octet")) {
+        res.set("Content-Type", contentType);
+        res.set("Cache-Control", "public, max-age=3600");
+        const buffer = Buffer.from(await response.arrayBuffer());
+        return res.send(buffer);
+      }
+
+      return res.status(404).end();
+    } catch {
+      return res.status(502).json({ message: "Unable to fetch thumbnail" });
+    }
+  });
+
+  // ── AI Content Studio ──────────────────────────────────────────
+  app.post("/api/aistudio/generate4", async (req: Request, res: Response) => {
+    const {
+      prompt,
+      content_type = "Static",
+      use_case = "Promotion",
+      orientation = "Landscape",
+      resolution = "1920x1080",
+      aspect_ratio = "16:9",
+    } = req.body;
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ message: "prompt is required" });
+    }
+    if (!process.env.IDEOGRAM_API_KEY) {
+      return res.status(503).json({ message: "IDEOGRAM_API_KEY is not configured." });
+    }
+
+    // Map orientation to aspect ratio if not explicitly set by frontend
+    const resolvedAspectRatio = aspect_ratio !== "16:9"
+      ? aspect_ratio
+      : (orientation === "Portrait" ? "9:16" : "16:9");
+
+    // Build context prefix from configuration
+    const configContext = [
+      content_type !== "Static" ? `${content_type} digital signage` : "digital signage display",
+      use_case ? `for ${use_case.toLowerCase()} purposes` : "",
+      orientation ? `in ${orientation.toLowerCase()} orientation` : "",
+      resolution ? `at ${resolution} resolution` : "",
+    ].filter(Boolean).join(", ");
+
+    const styleVariants = [
+      { title: "Showroom Showcase", suffix: "cinematic lighting, premium quality, ultra-realistic photography" },
+      { title: "Bold Statement",    suffix: "bold composition, high contrast, modern graphic design" },
+      { title: "Dynamic Lifestyle", suffix: "dynamic angle, vibrant atmosphere, aspirational lifestyle" },
+      { title: "Clean & Premium",   suffix: "clean minimal background, sleek presentation, luxury feel" },
+    ];
+
+    console.log(`[AI Studio] generate4 | aspect=${resolvedAspectRatio} | orientation=${orientation} | use_case=${use_case}`);
+
+    try {
+      const results = await Promise.allSettled(
+        styleVariants.map(async (v) => {
+          const enhancedPrompt = `${prompt}. Style: ${v.suffix}. Context: ${configContext}.`;
+          const result = await generateCreative(enhancedPrompt, "image", null, resolvedAspectRatio);
+          const entry = addGeneration({
+            prompt: enhancedPrompt,
+            mediaUrl: (result as any).mediaUrl || null,
+            model: result.model,
+            outputType: "image",
+            isDraft: false,
+            status: "completed",
+          });
+          return { ...entry, variantTitle: v.title };
+        })
+      );
+      const options = results.map((r, i) =>
+        r.status === "fulfilled"
+          ? r.value
+          : { id: `err-${i}`, variantTitle: styleVariants[i].title, mediaUrl: null, error: (r as any).reason?.message }
+      );
+      return res.json({ options, prompt, model: "ideogram-v2-turbo" });
+    } catch (err: any) {
+      const detail = err?.response?.data?.message || err?.message || "Generation failed";
+      return res.status(500).json({ message: detail });
+    }
+  });
+
+  app.post("/api/aistudio/generate", async (req: Request, res: Response) => {
+    const { prompt, output_type = "image", reference_image_url = null } = req.body;
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ message: "prompt is required" });
+    }
+    const falKeyMissing = !process.env.FAL_KEY;
+    const ideogramKeyMissing = !process.env.IDEOGRAM_API_KEY;
+    if (falKeyMissing && output_type !== "image") {
+      return res.status(503).json({ message: "FAL_KEY is not configured. Add it to Replit Secrets." });
+    }
+    if (falKeyMissing && output_type === "image" && !requiresTextRendering(prompt)) {
+      return res.status(503).json({ message: "FAL_KEY is not configured. Add it to Replit Secrets." });
+    }
+    if (ideogramKeyMissing && output_type === "image" && requiresTextRendering(prompt)) {
+      return res.status(503).json({ message: "IDEOGRAM_API_KEY is not configured. Add it to Replit Secrets." });
+    }
+    try {
+      const result = await generateCreative(prompt, output_type, reference_image_url);
+      const entry = addGeneration({
+        prompt,
+        mediaUrl: (result as any).mediaUrl || null,
+        model: result.model,
+        outputType: output_type,
+        isDraft: !!(result as any).isDraft,
+        requestId: (result as any).requestId,
+        status: (result as any).status || "completed",
+        fallbackNote: (result as any).fallbackNote,
+      });
+      return res.json(entry);
+    } catch (err: any) {
+      // Handle both @fal-ai/client SDK errors (err.status, err.body) and axios errors (err.response.status, err.response.data)
+      const status = err?.status ?? err?.response?.status;
+      const body = err?.body ?? err?.response?.data;
+      const detail = body?.detail || body?.message || err?.message || "Generation failed";
+      console.error("[AI Studio] generate error:", status, detail);
+      if (status === 403 || detail.toLowerCase().includes("exhausted") || detail.toLowerCase().includes("balance") || detail.toLowerCase().includes("locked") || detail.toLowerCase().includes("forbidden")) {
+        return res.status(402).json({ message: "fal.ai account balance exhausted. Top up at fal.ai/dashboard/billing to generate images." });
+      }
+      if (status === 401 || detail.toLowerCase().includes("unauthorized") || detail.toLowerCase().includes("authentication is required")) {
+        return res.status(401).json({ message: "fal.ai API key is invalid. Check your FAL_KEY secret." });
+      }
+      return res.status(500).json({ message: detail });
+    }
+  });
+
+  app.get("/api/aistudio/status/:requestId", async (req: Request, res: Response) => {
+    const { requestId } = req.params;
+    const { model } = req.query as { model: string };
+    if (!requestId || !model) {
+      return res.status(400).json({ message: "requestId and model are required" });
+    }
+    try {
+      const result = await pollVideoResult(requestId, model);
+      if (result.status === "completed" && result.mediaUrl) {
+        updateGeneration(requestId, { status: "completed", mediaUrl: result.mediaUrl });
+      }
+      return res.json(result);
+    } catch (err: any) {
+      const status = err?.status ?? err?.response?.status;
+      const body = err?.body ?? err?.response?.data;
+      const detail = body?.detail || body?.message || err?.message || "Poll failed";
+      console.error("[AI Studio] poll error:", status, detail);
+      if (status === 403 || detail.toLowerCase().includes("exhausted") || detail.toLowerCase().includes("balance") || detail.toLowerCase().includes("forbidden") || detail.toLowerCase().includes("locked")) {
+        return res.json({ status: "failed", error: "fal.ai account balance exhausted. Video generation requires fal.ai credits. Top up at fal.ai/dashboard/billing." });
+      }
+      return res.json({ status: "failed", error: detail });
+    }
+  });
+
+  app.get("/api/aistudio/history", (_req: Request, res: Response) => {
+    return res.json({ history: getHistory() });
+  });
+
+  const httpServer = createServer(app);
+  return httpServer;
+}
