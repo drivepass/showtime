@@ -55,11 +55,8 @@ export default function Login() {
       />
 
       {/* Top Left — DrivePass logo + URL */}
-      <div style={{ position: "absolute", top: 32, left: 40, zIndex: 10 }}>
+      <div style={{ position: "absolute", top: 48, left: 60, zIndex: 10 }}>
         <img src="/DP_logo_White.png" alt="drivepass" style={{ width: '180px', display: "block" }} />
-        <span style={{ color: "#1A91E2", fontSize: 13, marginTop: 6, display: "block" }}>
-          www.thedrivepass.com
-        </span>
       </div>
 
       {/* Bottom Left — Showtime icon */}
