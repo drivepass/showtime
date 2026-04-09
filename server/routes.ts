@@ -2,14 +2,16 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import crypto from "crypto";
-import { navoriLogin, navoriGetGroups, navoriGetPlayers, navoriGetPlayersById, navoriGetFolders, navoriGetMedias, navoriGetMediasById, navoriGetTemplates, navoriGetTemplatesById, navoriGetPlaylists, navoriGetPlaylistsById, navoriSetPlaylists, navoriSetPlaylistContents, navoriGetPlaylistContents, navoriGetContentWindow, navoriGetTimeSlots, navoriSetTimeSlots, navoriDeleteTimeSlots } from "./navori";
+import { navoriLogin, navoriGetGroups, navoriGetPlayers, navoriGetPlayersById, navoriGetFolders, navoriGetMedias, navoriGetMediasById, navoriGetTemplates, navoriGetTemplatesById, navoriGetPlaylists, navoriGetPlaylistsById, navoriSetPlaylists, navoriSetPlaylistContents, navoriGetPlaylistContents, navoriGetContentWindow, navoriGetTimeSlots, navoriSetTimeSlots, navoriDeleteTimeSlots, NAVORI_API_URL } from "./navori";
 import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport } from "./navori";
 import { generateCreative, pollVideoResult, addGeneration, updateGeneration, getHistory, requiresTextRendering } from "./aiStudio";
 
 function handleNavoriResult(req: Request, res: Response, result: { success: boolean; error?: string }, dataKey: string, data: any) {
   if (!result.success) {
     if (result.error === "NOT_AUTHORIZED") {
-      return res.status(403).json({ message: "Not authorized for this resource" });
+      delete req.session.navoriToken;
+      delete req.session.username;
+      return res.status(401).json({ message: "Session expired. Please log in again." });
     }
     return res.status(502).json({ message: result.error });
   }
@@ -165,7 +167,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
           delete req.session.navoriToken;
-          return res.status(403).json({ message: "Session expired" });
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
         }
         return res.status(502).json({ message: result.error || "Navori API error" });
       }
@@ -473,7 +476,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.on("end", async () => {
       const body = Buffer.concat(chunks);
       try {
-        const response = await fetch("https://saas.navori.com/NavoriService/api/UploadFile", {
+        const response = await fetch(`${NAVORI_API_URL}UploadFile`, {
           method: "POST",
           headers: {
             "Content-Type": contentType,
@@ -483,6 +486,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         let data: any;
         try { data = await response.json(); } catch { data = { Status: response.ok ? "SUCCESS" : "FAILED" }; }
+        if (data.Status === "NOT_AUTHORIZED") {
+          delete req.session.navoriToken;
+          delete req.session.username;
+          return res.status(401).json({ message: "Session expired. Please log in again." });
+        }
         if (data.Status === "SUCCESS" || response.ok) {
           return res.json({ success: true, media: data.Media || data });
         }
@@ -871,10 +879,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const navoriUrl = `https://saas.navori.com/NavoriService/MediaUpload.aspx?key=${encodeURIComponent(thumbnailPath)}`;
+      const baseHost = NAVORI_API_URL.replace(/\/api\/$/, "");
+      const navoriUrl = `${baseHost}/MediaUpload.aspx?key=${encodeURIComponent(thumbnailPath)}`;
       const response = await fetch(navoriUrl, {
         headers: { "Token": req.session.navoriToken! },
       });
+
+      if (response.status === 401 || response.status === 403) {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired. Please log in again." });
+      }
 
       if (!response.ok) {
         return res.status(response.status).end();
