@@ -40,118 +40,248 @@ export default function Login() {
   };
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden">
+    <div style={{ position: "relative", width: "100vw", height: "100vh", overflow: "hidden" }}>
       {/* Full screen background image */}
       <img
         src="/showtime-login-bg.jpg"
         alt=""
-        className="absolute inset-0 w-full h-full object-cover"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+        }}
       />
-      {/* Dark overlay */}
+
+      {/* Top Left — DrivePass logo + URL */}
+      <div style={{ position: "absolute", top: 32, left: 40, zIndex: 10 }}>
+        <img src="/DP_logo_White.png" alt="drivepass" style={{ width: '180px', display: "block" }} />
+        <span style={{ color: "#1A91E2", fontSize: 13, marginTop: 6, display: "block" }}>
+          www.thedrivepass.com
+        </span>
+      </div>
+
+      {/* Bottom Left — Showtime icon */}
+      <div style={{ position: "absolute", bottom: 32, left: 40, zIndex: 10 }}>
+        <img src="/showtime.png" alt="Showtime" style={{ width: '130px', display: "block" }} />
+      </div>
+
+      {/* Bottom Right — Automotive Absolute */}
+      <div style={{ position: "absolute", bottom: 32, right: 40, zIndex: 10 }}>
+        <img src="/automotive_absolute.png" alt="Automotive Absolute" style={{ width: 280, display: "block" }} />
+      </div>
+
+      {/* Right Side Login Card */}
       <div
-        className="absolute inset-0"
-        style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-      />
+        style={{
+          position: "absolute",
+          right: 80,
+          top: "50%",
+          transform: "translateY(-50%)",
+          width: 380,
+          background: "rgba(0, 0, 0, 0.72)",
+          borderRadius: 12,
+          padding: 40,
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+          zIndex: 10,
+        }}
+      >
+        <h2 style={{ color: "#fff", fontWeight: "bold", fontSize: 24, margin: 0 }}>
+          Welcome Back
+        </h2>
+        <p style={{ color: "#9CA3AF", fontSize: 13, marginTop: 6, marginBottom: 24 }}>
+          Please verify your credentials to continue.
+        </p>
 
-      {/* Content layer */}
-      <div className="relative z-10 w-full h-full flex items-start justify-end p-8">
-        {/* Login card */}
-        <div
-          className="rounded-2xl p-8"
-          style={{
-            backgroundColor: "rgba(0,0,0,0.7)",
-            width: "400px",
-          }}
-        >
-          <h2 className="text-2xl font-semibold text-white mb-1">
-            Welcome Back
-          </h2>
-          <p className="text-sm text-gray-400 mb-6">
-            Please verify your credentials to continue.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
-              <div className="bg-red-900/30 border border-red-800 text-red-400 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            {/* Username */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
-                Username
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
-                required
-                autoFocus
-                className="w-full h-12 bg-white/10 border border-white/20 rounded-lg px-4 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-[#1A91E2] transition-colors"
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                  className="w-full h-12 bg-white/10 border border-white/20 rounded-lg px-4 pr-10 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-[#1A91E2] transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                >
-                  {showPassword ? (
-                    <EyeOffIcon className="w-4 h-4" />
-                  ) : (
-                    <EyeIcon className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Remember me + Forgot password */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-white/20 bg-white/10 accent-[#1A91E2]"
-                />
-                <span className="text-xs text-gray-400">Remember me</span>
-              </label>
-              <button
-                type="button"
-                className="text-xs uppercase tracking-wide font-semibold hover:text-white transition-colors"
-                style={{ color: "#1A91E2" }}
-              >
-                Forgot Password?
-              </button>
-            </div>
-
-            {/* Sign In button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full h-12 text-white font-semibold text-sm rounded-lg transition-colors disabled:opacity-60 hover:brightness-110"
-              style={{ backgroundColor: "#1A91E2" }}
+        <form onSubmit={handleSubmit}>
+          {error && (
+            <div
+              style={{
+                background: "rgba(127,29,29,0.3)",
+                border: "1px solid #991b1b",
+                color: "#f87171",
+                padding: "10px 14px",
+                borderRadius: 8,
+                fontSize: 13,
+                marginBottom: 16,
+              }}
             >
-              {loading ? "Signing in..." : "SIGN IN"}
+              {error}
+            </div>
+          )}
+
+          {/* Username */}
+          <label
+            style={{
+              display: "block",
+              color: "#fff",
+              textTransform: "uppercase",
+              fontSize: 11,
+              letterSpacing: 1,
+              marginBottom: 6,
+              fontWeight: 600,
+            }}
+          >
+            USERNAME
+          </label>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+            autoFocus
+            style={{
+              width: "100%",
+              background: "#1a1a1a",
+              border: "1px solid #333",
+              borderRadius: 6,
+              padding: "10px 12px",
+              color: "#fff",
+              fontSize: 14,
+              outline: "none",
+              boxSizing: "border-box",
+              marginBottom: 16,
+            }}
+          />
+
+          {/* Password */}
+          <label
+            style={{
+              display: "block",
+              color: "#fff",
+              textTransform: "uppercase",
+              fontSize: 11,
+              letterSpacing: 1,
+              marginBottom: 6,
+              fontWeight: 600,
+            }}
+          >
+            PASSWORD
+          </label>
+          <div style={{ position: "relative", marginBottom: 16 }}>
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{
+                width: "100%",
+                background: "#1a1a1a",
+                border: "1px solid #333",
+                borderRadius: 6,
+                padding: "10px 12px",
+                paddingRight: 40,
+                color: "#fff",
+                fontSize: 14,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={{
+                position: "absolute",
+                right: 10,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#9CA3AF",
+                padding: 0,
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
             </button>
-          </form>
-        </div>
+          </div>
+
+          {/* Remember me + Forgot password */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 16,
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                style={{ accentColor: "#1A91E2" }}
+              />
+              <span
+                style={{
+                  color: "#fff",
+                  textTransform: "uppercase",
+                  fontSize: 11,
+                  letterSpacing: 1,
+                  fontWeight: 600,
+                }}
+              >
+                REMEMBER ME
+              </span>
+            </label>
+            <button
+              type="button"
+              style={{
+                background: "none",
+                border: "none",
+                color: "#9CA3AF",
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: 1,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              FORGOT PASSWORD?
+            </button>
+          </div>
+
+          {/* Sign In button */}
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: "100%",
+              background: "#1A91E2",
+              color: "#fff",
+              fontWeight: "bold",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              fontSize: 14,
+              padding: 12,
+              borderRadius: 6,
+              border: "none",
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.6 : 1,
+              marginTop: 8,
+              transition: "background 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) (e.currentTarget.style.background = "#1578c2");
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) (e.currentTarget.style.background = "#1A91E2");
+            }}
+          >
+            {loading ? "Signing in..." : "SIGN IN"}
+          </button>
+        </form>
       </div>
     </div>
   );
