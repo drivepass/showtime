@@ -1,7 +1,5 @@
-const NAVORI_API_URL = process.env.NAVORI_BASE_URL || "https://saas.navori.com/NavoriService/api/";
-const NAVORI_QL_URL = process.env.NAVORI_QL_URL || "https://saas.navori.com/NavoriService/QLService/";
-
-export { NAVORI_API_URL, NAVORI_QL_URL };
+const NAVORI_API_URL = "https://saas.navori.com/NavoriService/api/";
+const NAVORI_QL_URL = "https://saas.navori.com/NavoriService/QLService/";
 
 export async function navoriSetMedias(token: string, mediaList: any[]): Promise<{ success: boolean; medias?: any[]; error?: string }> {
   const response = await fetch(`${NAVORI_API_URL}SetMedias`, {
