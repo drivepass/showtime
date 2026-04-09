@@ -73,10 +73,11 @@ export default function Login() {
       <div
         style={{
           position: "absolute",
-          right: 80,
+          right: 100,
           top: "50%",
           transform: "translateY(-50%)",
           width: 380,
+          maxWidth: 420,
           background: "rgba(0, 0, 0, 0.72)",
           borderRadius: 12,
           padding: 40,
