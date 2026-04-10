@@ -82,7 +82,7 @@ export const TopNavigationBarSection = ({ activeTab = "home" }: TopNavProps): JS
           <div className={`flex items-center justify-center h-full px-3 ${isDark ? "bg-[#0a0e14]" : "bg-black"} border-r ${t.border}`} data-testid="logo-navori">
             <img
               className="w-[30px] h-[30px]"
-              alt="Navori Logo"
+              alt="drivepass"
               src="/figmaAssets/button-2.svg"
               onError={(e) => {
                 const el = e.target as HTMLImageElement;
@@ -137,9 +137,13 @@ export const TopNavigationBarSection = ({ activeTab = "home" }: TopNavProps): JS
           </button>
 
           <div ref={avatarRef}>
-            <div
-              className="flex items-center gap-2 cursor-pointer"
-              onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
+            <button
+              type="button"
+              className="flex items-center gap-2 cursor-pointer bg-transparent border-0 p-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                setAvatarMenuOpen((prev) => !prev);
+              }}
               data-testid="button-user-menu"
             >
               <div className="flex flex-col items-end pr-1">
@@ -154,7 +158,7 @@ export const TopNavigationBarSection = ({ activeTab = "home" }: TopNavProps): JS
               <div className="bg-[#1A91E2] rounded-full w-7 h-7 flex items-center justify-center flex-shrink-0" data-testid="img-avatar">
                 <span className="font-['Inter',Helvetica] font-semibold text-white text-[10px]">{initials}</span>
               </div>
-            </div>
+            </button>
 
             {avatarMenuOpen && createPortal(
               <div

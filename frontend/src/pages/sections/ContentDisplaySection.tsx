@@ -26,25 +26,41 @@ function getThumbnailUrl(item: ContentItem): string | undefined {
   return `/api/thumbnail/${path}`;
 }
 
+const VIDEO_EXTENSIONS = /\.(mp4|mov|avi|mkv|webm|m4v|wmv|flv|mpg|mpeg|ts)$/i;
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)$/i;
+
+function detectMediaKind(item: ContentItem): "video" | "image" | "unknown" {
+  const mime = (item.MimeType || item.Type || "").toLowerCase();
+  if (mime.includes("video")) return "video";
+  if (mime.includes("image")) return "image";
+  const candidates = [(item as any).FileName, (item as any).Filename, (item as any).Url, (item as any).FilePath, item.Name];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (VIDEO_EXTENSIONS.test(candidate)) return "video";
+    if (IMAGE_EXTENSIONS.test(candidate)) return "image";
+  }
+  return "unknown";
+}
+
 function getMediaTypeLabel(item: ContentItem): string {
   if (item.itemType === "template") return "Template";
-  const mime = (item.MimeType || item.Type || "").toLowerCase();
-  if (mime.includes("image")) return "Image";
-  if (mime.includes("video")) return "Video";
+  const kind = detectMediaKind(item);
+  if (kind === "video") return "Video";
+  if (kind === "image") return "Image";
   return item.Type || "File";
 }
 
 function getMediaIcon(item: ContentItem) {
   if (item.itemType === "template") return <LayoutTemplateIcon className="w-8 h-8 text-indigo-300" />;
-  const mime = (item.MimeType || item.Type || "").toLowerCase();
-  if (mime.includes("image")) return <ImageIcon className="w-8 h-8 text-blue-300" />;
-  if (mime.includes("video")) return <VideoIcon className="w-8 h-8 text-purple-300" />;
+  const kind = detectMediaKind(item);
+  if (kind === "image") return <ImageIcon className="w-8 h-8 text-blue-300" />;
+  if (kind === "video") return <VideoIcon className="w-8 h-8 text-purple-300" />;
   return <FileIcon className="w-8 h-8 text-[#d1d5db]" />;
 }
 
-function formatDuration(centiseconds?: number): string {
-  if (!centiseconds || centiseconds <= 0) return "";
-  const seconds = Math.round(centiseconds / 100);
+function formatDuration(milliseconds?: number): string {
+  if (!milliseconds || milliseconds <= 0) return "";
+  const seconds = Math.round(milliseconds / 1000);
   if (seconds < 60) return `${seconds}s`;
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;

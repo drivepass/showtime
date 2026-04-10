@@ -28,11 +28,31 @@ interface ContentItem {
   Duration?: number;
   Type?: string;
   MimeType?: string;
+  FileName?: string;
+  Filename?: string;
+  Url?: string;
+  FilePath?: string;
   ThumbnailPath?: string;
   ThumbnailUrl?: string;
   FileSize?: number;
   FolderId?: number;
   itemType: "media" | "template" | "feed";
+}
+
+const VIDEO_EXTENSIONS = /\.(mp4|mov|avi|mkv|webm|m4v|wmv|flv|mpg|mpeg|ts)$/i;
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)$/i;
+
+function detectMediaKind(item: { MimeType?: string; Type?: string; FileName?: string; Filename?: string; Url?: string; FilePath?: string; Name?: string; }): "video" | "image" | "unknown" {
+  const mime = String(item.MimeType || item.Type || "").toLowerCase();
+  if (mime.includes("video")) return "video";
+  if (mime.includes("image")) return "image";
+  const candidates = [item.FileName, item.Filename, item.Url, item.FilePath, item.Name];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (VIDEO_EXTENSIONS.test(candidate)) return "video";
+    if (IMAGE_EXTENSIONS.test(candidate)) return "image";
+  }
+  return "unknown";
 }
 
 interface SelectedFilter {
@@ -139,10 +159,18 @@ function MediaThumbnailCard({ item }: { item: ContentItem }) {
   const { t } = useTheme();
   const isSelected = selectedMediaId === item.Id && selectedMediaType === item.itemType;
   const thumb = getThumbnailUrl(item);
-  const mime = String(item.MimeType || item.Type || "").toLowerCase();
-  const isVideo = mime.includes("video");
-  const duration = item.Duration && item.Duration > 0 ? `${Math.round(item.Duration / 100)}s` : "";
-  const typeLabel = item.itemType === "template" ? "Template" : item.itemType === "feed" ? "Data Feed" : isVideo ? "Video" : "Image";
+  const mediaKind = detectMediaKind(item);
+  const isVideo = mediaKind === "video";
+  const duration = item.Duration && item.Duration > 0 ? `${Math.round(item.Duration / 1000)}s` : "";
+  const typeLabel = item.itemType === "template"
+    ? "Template"
+    : item.itemType === "feed"
+      ? "Data Feed"
+      : mediaKind === "video"
+        ? "Video"
+        : mediaKind === "image"
+          ? "Image"
+          : (item.Type || "File");
   const [imgError, setImgError] = useState(false);
 
   return (

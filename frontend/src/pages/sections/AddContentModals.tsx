@@ -372,9 +372,11 @@ export function AddContentModal({ isOpen, onClose, type }: AddContentModalProps)
 
   const parseDuration = (val: string): number => {
     const parts = val.split(":").map(Number);
-    if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
-    if (parts.length === 2) return (parts[0] * 60) + parts[1];
-    return parseInt(val) || 15;
+    let seconds = 0;
+    if (parts.length === 3) seconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+    else if (parts.length === 2) seconds = (parts[0] * 60) + parts[1];
+    else seconds = parseInt(val) || 15;
+    return seconds * 1000;
   };
 
   const handleOk = async () => {

@@ -4,7 +4,7 @@ import { GroupSelectionProvider } from "@/hooks/use-group-selection";
 import { PlayerSelectionProvider } from "@/hooks/use-player-selection";
 import { MediaSelectionProvider } from "@/hooks/use-media-selection";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { SearchIcon, ChevronDownIcon, ChevronRightIcon, Loader2Icon, RefreshCwIcon, DownloadIcon, XCircleIcon, MonitorIcon, PowerIcon, RotateCwIcon, SendIcon } from "lucide-react";
+import { SearchIcon, Loader2Icon, RefreshCwIcon, DownloadIcon, XCircleIcon, MonitorIcon, PowerIcon, RotateCwIcon, SendIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest, API_BASE } from "@/lib/queryClient";
@@ -26,35 +26,24 @@ interface Player {
 interface PlayerGroup {
   Id: number;
   Name: string;
-  ParentId?: number;
-  children?: PlayerGroup[];
 }
 
-function GroupTreeItem({ group, level, selectedId, onSelect }: { group: PlayerGroup; level: number; selectedId: number | null; onSelect: (id: number) => void }) {
-  const [expanded, setExpanded] = useState(level === 0);
+function GroupTreeItem({ group, selectedId, onSelect }: { group: PlayerGroup; selectedId: number | null; onSelect: (id: number) => void }) {
   const { t, isDark } = useTheme();
-  const hasChildren = group.children && group.children.length > 0;
   const isSelected = selectedId === group.Id;
 
   return (
-    <div>
-      <div
-        className={`flex items-center gap-1.5 py-1 px-2 cursor-pointer text-[11px] ${isSelected ? (isDark ? "bg-[#1a2a3a]" : "bg-blue-50") : ""} ${isDark ? "hover:bg-[#1a2a3a]/50" : "hover:bg-gray-50"} transition-colors`}
-        style={{ paddingLeft: `${8 + level * 16}px` }}
-        onClick={() => { onSelect(group.Id); if (hasChildren) setExpanded(!expanded); }}
-        data-testid={`group-tree-${group.Id}`}
-      >
-        {hasChildren ? (
-          expanded ? <ChevronDownIcon className={`w-3 h-3 ${t.textDim} flex-shrink-0`} /> : <ChevronRightIcon className={`w-3 h-3 ${t.textDim} flex-shrink-0`} />
-        ) : <div className="w-3 flex-shrink-0" />}
-        <svg className={`w-3 h-3 ${isSelected ? "text-[#2997cc]" : t.textDim} flex-shrink-0`} viewBox="0 0 16 14" fill="currentColor">
-          <path d="M6 0L8 2H16V14H0V0H6Z" />
-        </svg>
-        <span className={`truncate ${isSelected ? (isDark ? "text-[#2997cc]" : "text-blue-600") : (isDark ? "text-[#c8d2e0]" : "text-gray-700")}`}>{group.Name}</span>
-      </div>
-      {expanded && hasChildren && group.children!.map(child => (
-        <GroupTreeItem key={child.Id} group={child} level={level + 1} selectedId={selectedId} onSelect={onSelect} />
-      ))}
+    <div
+      className={`flex items-center gap-1.5 py-1 px-2 cursor-pointer text-[11px] ${isSelected ? (isDark ? "bg-[#1a2a3a]" : "bg-blue-50") : ""} ${isDark ? "hover:bg-[#1a2a3a]/50" : "hover:bg-gray-50"} transition-colors`}
+      style={{ paddingLeft: `8px` }}
+      onClick={() => onSelect(group.Id)}
+      data-testid={`group-tree-${group.Id}`}
+    >
+      <div className="w-3 flex-shrink-0" />
+      <svg className={`w-3 h-3 ${isSelected ? "text-[#2997cc]" : t.textDim} flex-shrink-0`} viewBox="0 0 16 14" fill="currentColor">
+        <path d="M6 0L8 2H16V14H0V0H6Z" />
+      </svg>
+      <span className={`truncate ${isSelected ? (isDark ? "text-[#2997cc]" : "text-blue-600") : (isDark ? "text-[#c8d2e0]" : "text-gray-700")}`}>{group.Name}</span>
     </div>
   );
 }
@@ -189,15 +178,16 @@ function MonitoringContent() {
           </div>
 
           <ScrollArea className="flex-1">
-            {groups.map(group => (
-              <GroupTreeItem
-                key={group.Id}
-                group={group}
-                level={0}
-                selectedId={selectedGroupId}
-                onSelect={setSelectedGroupId}
-              />
-            ))}
+            {groups
+              .filter((g) => !search || g.Name?.toLowerCase().includes(search.toLowerCase()))
+              .map(group => (
+                <GroupTreeItem
+                  key={group.Id}
+                  group={group}
+                  selectedId={selectedGroupId}
+                  onSelect={setSelectedGroupId}
+                />
+              ))}
           </ScrollArea>
         </aside>
 

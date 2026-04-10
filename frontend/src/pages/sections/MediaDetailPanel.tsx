@@ -47,9 +47,25 @@ function formatFileSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDuration(centiseconds?: number): string {
-  if (!centiseconds || centiseconds <= 0) return "N/A";
-  const totalSeconds = Math.round(centiseconds / 100);
+const VIDEO_EXTENSIONS = /\.(mp4|mov|avi|mkv|webm|m4v|wmv|flv|mpg|mpeg|ts)$/i;
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)$/i;
+
+function detectMediaKind(item: DetailItem): "video" | "image" | "unknown" {
+  const mime = String(item.MimeType || item.Type || "").toLowerCase();
+  if (mime.includes("video")) return "video";
+  if (mime.includes("image")) return "image";
+  const candidates = [item.FileName, item.Filename, item.Url, item.FilePath, item.Name];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (VIDEO_EXTENSIONS.test(String(candidate))) return "video";
+    if (IMAGE_EXTENSIONS.test(String(candidate))) return "image";
+  }
+  return "unknown";
+}
+
+function formatDuration(milliseconds?: number): string {
+  if (!milliseconds || milliseconds <= 0) return "N/A";
+  const totalSeconds = Math.round(milliseconds / 1000);
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
@@ -62,12 +78,12 @@ function parseDurationToCentiseconds(val: string): number {
   if (parts.length === 3) seconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
   else if (parts.length === 2) seconds = (parts[0] * 60) + parts[1];
   else seconds = parseInt(val) || 15;
-  return seconds * 100;
+  return seconds * 1000;
 }
 
-function formatCentisecondsToTime(centiseconds?: number): string {
-  if (!centiseconds || centiseconds <= 0) return "00:00:15";
-  const totalSeconds = Math.round(centiseconds / 100);
+function formatCentisecondsToTime(milliseconds?: number): string {
+  if (!milliseconds || milliseconds <= 0) return "00:00:15";
+  const totalSeconds = Math.round(milliseconds / 1000);
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
@@ -247,7 +263,7 @@ export function MediaDetailPanel() {
 
   const items = selectedMediaType === "template" ? data?.templates : data?.medias;
   const item: DetailItem | undefined = items?.[0];
-  const mime = (item?.MimeType || item?.Type || "").toLowerCase();
+  const mediaKind = item ? detectMediaKind(item) : "unknown";
   const isTemplate = selectedMediaType === "template";
   const thumbnail = item ? getThumbnail(item) : undefined;
   const fileSize = item ? getFileSize(item) : undefined;
@@ -295,7 +311,7 @@ export function MediaDetailPanel() {
               <img src={thumbnail} alt={item.Name} className="max-h-full max-w-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
             ) : null}
             <div className={thumbnail ? "hidden" : "flex items-center justify-center"}>
-              {isTemplate ? <LayoutTemplateIcon className={`w-12 h-12 ${t.textFaint}`} /> : mime.includes("image") ? <ImageIcon className={`w-12 h-12 ${t.textFaint}`} /> : mime.includes("video") ? <VideoIcon className={`w-12 h-12 ${t.textFaint}`} /> : <FileIcon className={`w-12 h-12 ${t.textFaint}`} />}
+              {isTemplate ? <LayoutTemplateIcon className={`w-12 h-12 ${t.textFaint}`} /> : mediaKind === "image" ? <ImageIcon className={`w-12 h-12 ${t.textFaint}`} /> : mediaKind === "video" ? <VideoIcon className={`w-12 h-12 ${t.textFaint}`} /> : <FileIcon className={`w-12 h-12 ${t.textFaint}`} />}
             </div>
           </div>
 
@@ -417,7 +433,7 @@ export function MediaDetailPanel() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Type</label>
-                <p className={valueClass}>{isTemplate ? "Template" : item.Type || item.MimeType || "Unknown"}</p>
+                <p className={valueClass}>{isTemplate ? "Template" : mediaKind === "video" ? "Video" : mediaKind === "image" ? "Image" : item.Type || item.MimeType || "Unknown"}</p>
               </div>
               {!isTemplate && (
                 <div>
