@@ -76,11 +76,20 @@ function MonitoringContent() {
 
   const players: Player[] = playersData?.players || [];
   const allGroups: PlayerGroup[] = groupsData?.groups || [];
-  const EXCLUDED_GROUP_NAMES = new Set(["saas", "middle east and north africa", "saudi arabia"]);
-  const playerGroupIds = new Set(players.map((p) => p.GroupId).filter((id): id is number => typeof id === "number"));
+  const EXCLUDED_GROUP_NAMES = new Set([
+    "saas",
+    "middle east and north africa",
+    "saudi arabia",
+    "middle east",
+    "mena",
+  ]);
   const groups: PlayerGroup[] = allGroups.filter((g) => {
-    if (EXCLUDED_GROUP_NAMES.has((g.Name || "").trim().toLowerCase())) return false;
-    return playerGroupIds.has(g.Id);
+    const name = (g.Name || "").trim().toLowerCase();
+    if (!name) return true;
+    if (EXCLUDED_GROUP_NAMES.has(name)) return false;
+    if (name.includes("middle east")) return false;
+    if (name.includes("north africa")) return false;
+    return true;
   });
 
   const filteredPlayers = players.filter((p) => {

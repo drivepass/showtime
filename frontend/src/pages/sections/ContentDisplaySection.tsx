@@ -36,18 +36,18 @@ function detectMediaKind(item: ContentItem): "video" | "image" | "unknown" {
     if (rawType === 1) return "image";
     if (rawType === 2) return "video";
   }
-  const typeStr = String(rawType || "").toLowerCase();
-  if (typeStr.includes("video")) return "video";
-  if (typeStr.includes("image") || typeStr.includes("picture") || typeStr.includes("photo")) return "image";
-  const mime = String(item.MimeType || "").toLowerCase();
-  if (mime.includes("video")) return "video";
-  if (mime.includes("image")) return "image";
   const candidates = [(item as any).FileName, (item as any).Filename, (item as any).Url, (item as any).FilePath, item.ThumbnailPath, item.ThumbnailUrl, item.Name];
   for (const candidate of candidates) {
     if (!candidate) continue;
     if (VIDEO_EXTENSIONS.test(candidate)) return "video";
     if (IMAGE_EXTENSIONS.test(candidate)) return "image";
   }
+  const mime = String(item.MimeType || "").toLowerCase();
+  if (mime.includes("video")) return "video";
+  if (mime.includes("image")) return "image";
+  const typeStr = String(rawType || "").toLowerCase();
+  if (typeStr.includes("video")) return "video";
+  if (typeStr.includes("image") || typeStr.includes("picture") || typeStr.includes("photo")) return "image";
   return "unknown";
 }
 
