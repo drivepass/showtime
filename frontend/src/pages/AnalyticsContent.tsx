@@ -45,7 +45,7 @@ function GroupTreeItem({ group, selectedId, onSelect }: { group: PlayerGroup; se
 
 function formatDuration(milliseconds: number): string {
   if (!milliseconds || milliseconds <= 0) return "0:00";
-  const totalSeconds = Math.round(milliseconds / 1000);
+  const totalSeconds = Math.floor(milliseconds / 1000);
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;

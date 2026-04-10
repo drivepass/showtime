@@ -34,7 +34,7 @@ interface ContentDetail {
 
 function formatDuration(milliseconds?: number): string {
   if (!milliseconds || milliseconds <= 0) return "0s";
-  const totalSeconds = Math.round(milliseconds / 1000);
+  const totalSeconds = Math.floor(milliseconds / 1000);
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;

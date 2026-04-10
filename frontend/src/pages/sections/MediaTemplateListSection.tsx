@@ -26,7 +26,8 @@ interface ContentItem {
   Id: number;
   Name: string;
   Duration?: number;
-  Type?: string;
+  Type?: any;
+  MediaType?: any;
   MimeType?: string;
   FileName?: string;
   Filename?: string;
@@ -42,11 +43,19 @@ interface ContentItem {
 const VIDEO_EXTENSIONS = /\.(mp4|mov|avi|mkv|webm|m4v|wmv|flv|mpg|mpeg|ts)$/i;
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)$/i;
 
-function detectMediaKind(item: { MimeType?: string; Type?: string; FileName?: string; Filename?: string; Url?: string; FilePath?: string; Name?: string; }): "video" | "image" | "unknown" {
-  const mime = String(item.MimeType || item.Type || "").toLowerCase();
+function detectMediaKind(item: { MimeType?: string; Type?: any; MediaType?: any; FileName?: string; Filename?: string; Url?: string; FilePath?: string; ThumbnailPath?: string; ThumbnailUrl?: string; Name?: string; }): "video" | "image" | "unknown" {
+  const rawType = item.MediaType ?? item.Type;
+  if (typeof rawType === "number") {
+    if (rawType === 1) return "image";
+    if (rawType === 2) return "video";
+  }
+  const typeStr = String(rawType || "").toLowerCase();
+  if (typeStr.includes("video")) return "video";
+  if (typeStr.includes("image") || typeStr.includes("picture") || typeStr.includes("photo")) return "image";
+  const mime = String(item.MimeType || "").toLowerCase();
   if (mime.includes("video")) return "video";
   if (mime.includes("image")) return "image";
-  const candidates = [item.FileName, item.Filename, item.Url, item.FilePath, item.Name];
+  const candidates = [item.FileName, item.Filename, item.Url, item.FilePath, item.ThumbnailPath, item.ThumbnailUrl, item.Name];
   for (const candidate of candidates) {
     if (!candidate) continue;
     if (VIDEO_EXTENSIONS.test(candidate)) return "video";
@@ -161,7 +170,7 @@ function MediaThumbnailCard({ item }: { item: ContentItem }) {
   const thumb = getThumbnailUrl(item);
   const mediaKind = detectMediaKind(item);
   const isVideo = mediaKind === "video";
-  const duration = item.Duration && item.Duration > 0 ? `${Math.round(item.Duration / 1000)}s` : "";
+  const duration = item.Duration && item.Duration > 0 ? `${Math.floor(item.Duration / 1000)}s` : "";
   const typeLabel = item.itemType === "template"
     ? "Template"
     : item.itemType === "feed"
@@ -170,7 +179,7 @@ function MediaThumbnailCard({ item }: { item: ContentItem }) {
         ? "Video"
         : mediaKind === "image"
           ? "Image"
-          : (item.Type || "File");
+          : "Media";
   const [imgError, setImgError] = useState(false);
 
   return (

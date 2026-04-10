@@ -51,10 +51,18 @@ const VIDEO_EXTENSIONS = /\.(mp4|mov|avi|mkv|webm|m4v|wmv|flv|mpg|mpeg|ts)$/i;
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)$/i;
 
 function detectMediaKind(item: DetailItem): "video" | "image" | "unknown" {
-  const mime = String(item.MimeType || item.Type || "").toLowerCase();
+  const rawType = (item as any).MediaType ?? item.Type;
+  if (typeof rawType === "number") {
+    if (rawType === 1) return "image";
+    if (rawType === 2) return "video";
+  }
+  const typeStr = String(rawType || "").toLowerCase();
+  if (typeStr.includes("video")) return "video";
+  if (typeStr.includes("image") || typeStr.includes("picture") || typeStr.includes("photo")) return "image";
+  const mime = String(item.MimeType || "").toLowerCase();
   if (mime.includes("video")) return "video";
   if (mime.includes("image")) return "image";
-  const candidates = [item.FileName, item.Filename, item.Url, item.FilePath, item.Name];
+  const candidates = [item.FileName, item.Filename, item.Url, item.FilePath, item.ThumbnailPath, item.ThumbnailUrl, item.Name];
   for (const candidate of candidates) {
     if (!candidate) continue;
     if (VIDEO_EXTENSIONS.test(String(candidate))) return "video";
@@ -65,7 +73,7 @@ function detectMediaKind(item: DetailItem): "video" | "image" | "unknown" {
 
 function formatDuration(milliseconds?: number): string {
   if (!milliseconds || milliseconds <= 0) return "N/A";
-  const totalSeconds = Math.round(milliseconds / 1000);
+  const totalSeconds = Math.floor(milliseconds / 1000);
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
@@ -83,7 +91,7 @@ function parseDurationToCentiseconds(val: string): number {
 
 function formatCentisecondsToTime(milliseconds?: number): string {
   if (!milliseconds || milliseconds <= 0) return "00:00:15";
-  const totalSeconds = Math.round(milliseconds / 1000);
+  const totalSeconds = Math.floor(milliseconds / 1000);
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
@@ -433,7 +441,7 @@ export function MediaDetailPanel() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Type</label>
-                <p className={valueClass}>{isTemplate ? "Template" : mediaKind === "video" ? "Video" : mediaKind === "image" ? "Image" : item.Type || item.MimeType || "Unknown"}</p>
+                <p className={valueClass}>{isTemplate ? "Template" : mediaKind === "video" ? "Video" : mediaKind === "image" ? "Image" : "Media"}</p>
               </div>
               {!isTemplate && (
                 <div>

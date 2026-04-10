@@ -75,7 +75,13 @@ function MonitoringContent() {
   });
 
   const players: Player[] = playersData?.players || [];
-  const groups: PlayerGroup[] = groupsData?.groups || [];
+  const allGroups: PlayerGroup[] = groupsData?.groups || [];
+  const EXCLUDED_GROUP_NAMES = new Set(["saas", "middle east and north africa", "saudi arabia"]);
+  const playerGroupIds = new Set(players.map((p) => p.GroupId).filter((id): id is number => typeof id === "number"));
+  const groups: PlayerGroup[] = allGroups.filter((g) => {
+    if (EXCLUDED_GROUP_NAMES.has((g.Name || "").trim().toLowerCase())) return false;
+    return playerGroupIds.has(g.Id);
+  });
 
   const filteredPlayers = players.filter((p) => {
     const matchesSearch = !search || p.Name?.toLowerCase().includes(search.toLowerCase());

@@ -9,7 +9,8 @@ interface ContentItem {
   Id: number;
   Name: string;
   Duration?: number;
-  Type?: string;
+  Type?: any;
+  MediaType?: any;
   MimeType?: string;
   ThumbnailUrl?: string;
   ThumbnailPath?: string;
@@ -30,10 +31,18 @@ const VIDEO_EXTENSIONS = /\.(mp4|mov|avi|mkv|webm|m4v|wmv|flv|mpg|mpeg|ts)$/i;
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)$/i;
 
 function detectMediaKind(item: ContentItem): "video" | "image" | "unknown" {
-  const mime = (item.MimeType || item.Type || "").toLowerCase();
+  const rawType = item.MediaType ?? item.Type;
+  if (typeof rawType === "number") {
+    if (rawType === 1) return "image";
+    if (rawType === 2) return "video";
+  }
+  const typeStr = String(rawType || "").toLowerCase();
+  if (typeStr.includes("video")) return "video";
+  if (typeStr.includes("image") || typeStr.includes("picture") || typeStr.includes("photo")) return "image";
+  const mime = String(item.MimeType || "").toLowerCase();
   if (mime.includes("video")) return "video";
   if (mime.includes("image")) return "image";
-  const candidates = [(item as any).FileName, (item as any).Filename, (item as any).Url, (item as any).FilePath, item.Name];
+  const candidates = [(item as any).FileName, (item as any).Filename, (item as any).Url, (item as any).FilePath, item.ThumbnailPath, item.ThumbnailUrl, item.Name];
   for (const candidate of candidates) {
     if (!candidate) continue;
     if (VIDEO_EXTENSIONS.test(candidate)) return "video";
@@ -47,7 +56,7 @@ function getMediaTypeLabel(item: ContentItem): string {
   const kind = detectMediaKind(item);
   if (kind === "video") return "Video";
   if (kind === "image") return "Image";
-  return item.Type || "File";
+  return "Media";
 }
 
 function getMediaIcon(item: ContentItem) {
@@ -60,7 +69,7 @@ function getMediaIcon(item: ContentItem) {
 
 function formatDuration(milliseconds?: number): string {
   if (!milliseconds || milliseconds <= 0) return "";
-  const seconds = Math.round(milliseconds / 1000);
+  const seconds = Math.floor(milliseconds / 1000);
   if (seconds < 60) return `${seconds}s`;
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
