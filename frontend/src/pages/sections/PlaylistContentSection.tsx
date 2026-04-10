@@ -118,6 +118,17 @@ function getTypeLabel(contentType: string | undefined, detail: ContentDetail | u
 function PlaylistContentRow({ content, detail, index }: { content: PlaylistContent; detail?: ContentDetail; index: number }) {
   const { t } = useTheme();
   const typeLabel = getTypeLabel(content.Type, detail);
+  console.log('[PLAYLIST ROW]', {
+    contentId: content.ContentId,
+    contentType: content.Type,
+    detailKeys: detail ? Object.keys(detail) : null,
+    detailName: detail?.Name,
+    detailType: detail?.Type,
+    detailMediaType: (detail as any)?.MediaType,
+    detailMediaTypeId: (detail as any)?.MediaTypeId,
+    detailMimeType: detail?.MimeType,
+    typeLabel,
+  });
   const [imgError, setImgError] = useState(false);
 
   const thumbPath = detail?.ThumbnailPath;
@@ -203,6 +214,8 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
     },
     enabled: mediaIds.length > 0,
   });
+
+  console.log('[PLAYLIST MEDIA DETAILS]', JSON.stringify((mediaDetails?.medias || [])[0]));
 
   const detailLookup = useMemo(() => {
     const map = new Map<number, ContentDetail>();
