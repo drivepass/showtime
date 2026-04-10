@@ -98,8 +98,17 @@ function getContentTypeIcon(type?: string) {
 }
 
 function getTypeLabel(contentType: string | undefined, detail: ContentDetail | undefined): string {
-  const ct = (contentType || "").toLowerCase();
-  if (ct.includes("template")) return "Template";
+  if ((contentType || "").toLowerCase().includes("template")) return "Template";
+  const detailType = detail?.Type;
+  if (typeof detailType === "string") {
+    const lower = detailType.toLowerCase();
+    if (lower === "video" || lower.includes("video")) return "Video";
+    if (lower === "image" || lower.includes("image")) return "Image";
+  }
+  if (typeof detailType === "number") {
+    if (detailType === 1) return "Video";
+    if (detailType === 2) return "Image";
+  }
   const kind = detectMediaKind(detail);
   if (kind === "video") return "Video";
   if (kind === "image") return "Image";
