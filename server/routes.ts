@@ -174,6 +174,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.status(502).json({ message: result.error || "Navori API error" });
       }
+      for (const item of result.medias || []) {
+        console.log('[MEDIA DEBUG]', JSON.stringify({ Name: item.Name, Type: item.Type, MediaType: item.MediaType, MimeType: item.MimeType, FileName: item.FileName, Filename: item.Filename, Url: item.Url, FilePath: item.FilePath, ThumbnailPath: item.ThumbnailPath }));
+      }
       return res.json({
         medias: result.medias || [],
         templates: result.templates || [],
@@ -236,6 +239,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const result = await navoriGetMedias(req.session.navoriToken, groupId, filter, folderId);
+      for (const item of result.medias || []) {
+        console.log('[MEDIA DEBUG]', JSON.stringify({ Name: item.Name, Type: item.Type, MediaType: item.MediaType, MimeType: item.MimeType, FileName: item.FileName, Filename: item.Filename, Url: item.Url, FilePath: item.FilePath, ThumbnailPath: item.ThumbnailPath }));
+      }
       return handleNavoriResult(req, res, result, "medias", result.medias);
     } catch {
       return res.status(502).json({ message: "Unable to reach Navori API" });
