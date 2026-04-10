@@ -151,8 +151,8 @@ export const TopNavigationBarSection = ({ activeTab = "home" }: TopNavProps): JS
                 </span>
               </div>
 
-              <div className={`${isDark ? "bg-[#1a2a3a]" : "bg-gray-200"} border ${t.borderAccent} rounded-full w-7 h-7 flex items-center justify-center flex-shrink-0`} data-testid="img-avatar">
-                <span className={`font-['Inter',Helvetica] font-medium ${t.textMuted} text-[9px]`}>{initials}</span>
+              <div className="bg-[#1A91E2] rounded-full w-7 h-7 flex items-center justify-center flex-shrink-0" data-testid="img-avatar">
+                <span className="font-['Inter',Helvetica] font-semibold text-white text-[10px]">{initials}</span>
               </div>
             </div>
 
@@ -166,9 +166,9 @@ export const TopNavigationBarSection = ({ activeTab = "home" }: TopNavProps): JS
                   right: avatarRef.current ? window.innerWidth - avatarRef.current.getBoundingClientRect().right : 0,
                 }}
               >
-                <div className={`px-4 py-2 border-b ${isDark ? "border-[#1e2e3e]" : "border-gray-100"}`}>
-                  <p className={`text-[12px] font-medium ${isDark ? "text-[#c8d2e0]" : "text-gray-800"}`}>{user?.username || "Guest"}</p>
-                  <p className={`text-[10px] ${isDark ? "text-[#6b7a8d]" : "text-gray-500"}`}>Systemrapid - 56059</p>
+                <div className={`px-4 py-2 border-b ${isDark ? "border-[#1e2e3e]" : "border-gray-100"} select-none cursor-default`} data-testid="text-logged-in-as">
+                  <p className={`text-[11px] ${isDark ? "text-[#6b7a8d]" : "text-gray-500"}`}>Logged in as: <span className="font-medium">{user?.username || "Guest"}</span></p>
+                  <p className={`text-[10px] ${isDark ? "text-[#546e7a]" : "text-gray-400"}`}>Systemrapid - 56059</p>
                 </div>
 
                 <div className={`py-1 border-b ${isDark ? "border-[#1e2e3e]" : "border-gray-100"}`}>
@@ -208,9 +208,9 @@ export const TopNavigationBarSection = ({ activeTab = "home" }: TopNavProps): JS
                 </div>
 
                 <div className="py-1">
-                  <button className={`w-full px-4 py-2 text-left text-[12px] ${isDark ? "text-red-400 hover:bg-[#1a2a3a]" : "text-red-600 hover:bg-gray-50"} transition-colors flex items-center gap-2`} onClick={handleLogout} data-testid="button-logout">
+                  <button className={`w-full px-4 py-2 text-left text-[12px] ${isDark ? "text-red-400" : "text-red-600"} hover:bg-[#ef4444] hover:text-white transition-colors flex items-center gap-2`} onClick={handleLogout} data-testid="button-logout">
                     <LogOut className="w-3.5 h-3.5" />
-                    Sign Out
+                    Log Out
                   </button>
                 </div>
               </div>,
