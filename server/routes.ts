@@ -53,9 +53,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     let result;
     try {
-      console.log('[LOGIN ATTEMPT]', { login: username, passwordLength: password?.length });
       result = await navoriLogin(username, password);
-      console.log('[NAVORI RESPONSE]', JSON.stringify(result));
     } catch {
       return res.status(502).json({ message: "Unable to reach authentication service" });
     }
