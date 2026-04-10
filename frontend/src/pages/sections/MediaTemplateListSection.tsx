@@ -46,8 +46,8 @@ const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)$/i;
 function detectMediaKind(item: { MimeType?: string; Type?: any; MediaType?: any; FileName?: string; Filename?: string; Url?: string; FilePath?: string; ThumbnailPath?: string; ThumbnailUrl?: string; Name?: string; }): "video" | "image" | "unknown" {
   const rawType = item.MediaType ?? item.Type;
   if (typeof rawType === "number") {
-    if (rawType === 1) return "image";
-    if (rawType === 2) return "video";
+    if (rawType === 1) return "video";
+    if (rawType === 2) return "image";
   }
   const sourceCandidates = [item.FileName, item.Filename, item.Url, item.FilePath, item.Name];
   for (const candidate of sourceCandidates) {

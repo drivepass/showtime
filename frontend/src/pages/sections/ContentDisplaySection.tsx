@@ -33,8 +33,8 @@ const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)$/i;
 function detectMediaKind(item: ContentItem): "video" | "image" | "unknown" {
   const rawType = item.MediaType ?? item.Type;
   if (typeof rawType === "number") {
-    if (rawType === 1) return "image";
-    if (rawType === 2) return "video";
+    if (rawType === 1) return "video";
+    if (rawType === 2) return "image";
   }
   const sourceCandidates = [(item as any).FileName, (item as any).Filename, (item as any).Url, (item as any).FilePath, item.Name];
   for (const candidate of sourceCandidates) {
