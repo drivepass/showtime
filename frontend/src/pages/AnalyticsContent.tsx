@@ -117,7 +117,22 @@ function AnalyticsContentPage() {
     },
   });
 
-  const groups: PlayerGroup[] = groupsData?.groups || [];
+  const EXCLUDED_GROUP_NAMES = new Set([
+    "saas",
+    "middle east and north africa",
+    "saudi arabia",
+    "middle east",
+    "mena",
+  ]);
+  const rawGroups: PlayerGroup[] = groupsData?.groups || [];
+  const groups: PlayerGroup[] = rawGroups.filter((g) => {
+    const name = (g.Name || "").trim().toLowerCase();
+    if (!name) return true;
+    if (EXCLUDED_GROUP_NAMES.has(name)) return false;
+    if (name.includes("middle east")) return false;
+    if (name.includes("north africa")) return false;
+    return true;
+  });
   const isLoading = mediasLoading || templatesLoading || playlistsLoading;
 
   const allContent: ContentRow[] = useMemo(() => {

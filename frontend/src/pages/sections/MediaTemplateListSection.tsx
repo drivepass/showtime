@@ -49,8 +49,8 @@ function detectMediaKind(item: { MimeType?: string; Type?: any; MediaType?: any;
     if (rawType === 1) return "image";
     if (rawType === 2) return "video";
   }
-  const candidates = [item.FileName, item.Filename, item.Url, item.FilePath, item.ThumbnailPath, item.ThumbnailUrl, item.Name];
-  for (const candidate of candidates) {
+  const sourceCandidates = [item.FileName, item.Filename, item.Url, item.FilePath, item.Name];
+  for (const candidate of sourceCandidates) {
     if (!candidate) continue;
     if (VIDEO_EXTENSIONS.test(candidate)) return "video";
     if (IMAGE_EXTENSIONS.test(candidate)) return "image";

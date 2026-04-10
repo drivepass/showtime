@@ -36,8 +36,8 @@ function detectMediaKind(item: ContentItem): "video" | "image" | "unknown" {
     if (rawType === 1) return "image";
     if (rawType === 2) return "video";
   }
-  const candidates = [(item as any).FileName, (item as any).Filename, (item as any).Url, (item as any).FilePath, item.ThumbnailPath, item.ThumbnailUrl, item.Name];
-  for (const candidate of candidates) {
+  const sourceCandidates = [(item as any).FileName, (item as any).Filename, (item as any).Url, (item as any).FilePath, item.Name];
+  for (const candidate of sourceCandidates) {
     if (!candidate) continue;
     if (VIDEO_EXTENSIONS.test(candidate)) return "video";
     if (IMAGE_EXTENSIONS.test(candidate)) return "image";

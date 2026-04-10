@@ -29,11 +29,29 @@ interface TreeNode {
   group?: Group;
 }
 
+const EXCLUDED_GROUP_NAMES = new Set([
+  "saas",
+  "middle east and north africa",
+  "saudi arabia",
+  "middle east",
+  "mena",
+]);
+
+function isExcludedGroupName(name?: string): boolean {
+  const normalized = (name || "").trim().toLowerCase();
+  if (!normalized) return false;
+  if (EXCLUDED_GROUP_NAMES.has(normalized)) return true;
+  if (normalized.includes("middle east")) return true;
+  if (normalized.includes("north africa")) return true;
+  return false;
+}
+
 function buildTree(groups: Group[], players: Player[]): TreeNode[] {
+  const filteredGroups = groups.filter((g) => !isExcludedGroupName(g.Name));
   const groupMap = new Map<number, TreeNode>();
   const rootNodes: TreeNode[] = [];
 
-  for (const group of groups) {
+  for (const group of filteredGroups) {
     const node: TreeNode = { type: "group", id: group.Id, name: group.Name, children: [], group };
     groupMap.set(group.Id, node);
     rootNodes.push(node);
