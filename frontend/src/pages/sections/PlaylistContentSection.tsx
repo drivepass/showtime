@@ -31,6 +31,7 @@ interface ContentDetail {
   MimeType?: string;
   Type?: any;
   MediaType?: any;
+  MediaPath?: string;
   FileName?: string;
   Filename?: string;
   Url?: string;
@@ -99,6 +100,10 @@ function getContentTypeIcon(type?: string) {
 
 function getTypeLabel(contentType: string | undefined, detail: ContentDetail | undefined): string {
   if ((contentType || "").toLowerCase().includes("template")) return "Template";
+  if (detail?.MediaPath) {
+    if (VIDEO_EXTENSIONS.test(detail.MediaPath)) return "Video";
+    if (IMAGE_EXTENSIONS.test(detail.MediaPath)) return "Image";
+  }
   const detailType = detail?.Type;
   if (typeof detailType === "string") {
     const lower = detailType.toLowerCase();
