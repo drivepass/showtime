@@ -29,7 +29,12 @@ interface ContentDetail {
   ThumbnailPath?: string;
   Duration?: number;
   MimeType?: string;
-  Type?: string;
+  Type?: any;
+  MediaType?: any;
+  FileName?: string;
+  Filename?: string;
+  Url?: string;
+  FilePath?: string;
 }
 
 function formatDuration(milliseconds?: number): string {
@@ -39,6 +44,31 @@ function formatDuration(milliseconds?: number): string {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return s > 0 ? `${m}m${s}s` : `${m}m`;
+}
+
+const VIDEO_EXTENSIONS = /\.(mp4|mov|avi|mkv|webm|m4v|wmv|flv|mpg|mpeg|ts)$/i;
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|bmp|webp|svg|tiff?)$/i;
+
+function detectMediaKind(detail?: ContentDetail): "video" | "image" | "unknown" {
+  if (!detail) return "unknown";
+  const rawType = detail.MediaType ?? detail.Type;
+  if (typeof rawType === "number") {
+    if (rawType === 1) return "video";
+    if (rawType === 2) return "image";
+  }
+  const sourceCandidates = [detail.FileName, detail.Filename, detail.Url, detail.FilePath, detail.Name];
+  for (const candidate of sourceCandidates) {
+    if (!candidate) continue;
+    if (VIDEO_EXTENSIONS.test(candidate)) return "video";
+    if (IMAGE_EXTENSIONS.test(candidate)) return "image";
+  }
+  const mime = String(detail.MimeType || "").toLowerCase();
+  if (mime.includes("video")) return "video";
+  if (mime.includes("image")) return "image";
+  const typeStr = String(rawType || "").toLowerCase();
+  if (typeStr.includes("video")) return "video";
+  if (typeStr.includes("image") || typeStr.includes("picture") || typeStr.includes("photo")) return "image";
+  return "unknown";
 }
 
 function TemplateIcon({ className }: { className?: string }) {
@@ -67,15 +97,18 @@ function getContentTypeIcon(type?: string) {
   return <MediaIcon className="w-5 h-5 text-gray-500" />;
 }
 
-function getTypeLabel(type?: string): string {
-  const ct = (type || "").toLowerCase();
+function getTypeLabel(contentType: string | undefined, detail: ContentDetail | undefined): string {
+  const ct = (contentType || "").toLowerCase();
   if (ct.includes("template")) return "Template";
+  const kind = detectMediaKind(detail);
+  if (kind === "video") return "Video";
+  if (kind === "image") return "Image";
   return "Media";
 }
 
 function PlaylistContentRow({ content, detail, index }: { content: PlaylistContent; detail?: ContentDetail; index: number }) {
   const { t } = useTheme();
-  const typeLabel = getTypeLabel(content.Type);
+  const typeLabel = getTypeLabel(content.Type, detail);
   const [imgError, setImgError] = useState(false);
 
   const thumbPath = detail?.ThumbnailPath;
