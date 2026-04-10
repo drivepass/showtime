@@ -32,9 +32,9 @@ interface ContentDetail {
   Type?: string;
 }
 
-function formatDuration(tenths?: number): string {
-  if (!tenths || tenths <= 0) return "0s";
-  const totalSeconds = Math.round(tenths / 10);
+function formatDuration(centiseconds?: number): string {
+  if (!centiseconds || centiseconds <= 0) return "0s";
+  const totalSeconds = Math.round(centiseconds / 100);
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;

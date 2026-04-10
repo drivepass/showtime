@@ -17,8 +17,6 @@ interface Player {
 interface Group {
   Id: number;
   Name: string;
-  ParentGroupId?: number | null;
-  ParentId?: number | null;
   [key: string]: any;
 }
 
@@ -31,25 +29,14 @@ interface TreeNode {
   group?: Group;
 }
 
-function getParentId(group: Group): number | null {
-  return group.ParentGroupId || group.ParentId || null;
-}
-
 function buildTree(groups: Group[], players: Player[]): TreeNode[] {
   const groupMap = new Map<number, TreeNode>();
   const rootNodes: TreeNode[] = [];
 
   for (const group of groups) {
-    groupMap.set(group.Id, { type: "group", id: group.Id, name: group.Name, children: [], group });
-  }
-  for (const group of groups) {
-    const node = groupMap.get(group.Id)!;
-    const parentId = getParentId(group);
-    if (parentId && groupMap.has(parentId)) {
-      groupMap.get(parentId)!.children.push(node);
-    } else {
-      rootNodes.push(node);
-    }
+    const node: TreeNode = { type: "group", id: group.Id, name: group.Name, children: [], group };
+    groupMap.set(group.Id, node);
+    rootNodes.push(node);
   }
   for (const player of players) {
     const playerNode: TreeNode = { type: "player", id: player.Id, name: player.Name, children: [], player };
@@ -209,11 +196,10 @@ export const NavigationMenuSection = (): JSX.Element => {
   const filtered = filterTree(tree, search);
 
   useEffect(() => {
-    if (!selectedGroupId && groups.length > 0 && players.length > 0) {
+    if (!selectedGroupId && groups.length > 0) {
       const playerGroupIds = new Set(players.map((p) => p.GroupId));
       const groupWithPlayers = groups.find((g) => playerGroupIds.has(g.Id));
-      const subGroup = groups.find((g) => getParentId(g) !== null && getParentId(g)! > 0);
-      const target = groupWithPlayers || subGroup || groups[0];
+      const target = groupWithPlayers || groups[0];
       selectGroup(target.Id, target.Name);
     }
   }, [groups, players, selectedGroupId, selectGroup]);

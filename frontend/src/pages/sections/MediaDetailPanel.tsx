@@ -47,27 +47,27 @@ function formatFileSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDuration(tenths?: number): string {
-  if (!tenths || tenths <= 0) return "N/A";
-  const totalSeconds = Math.round(tenths / 10);
+function formatDuration(centiseconds?: number): string {
+  if (!centiseconds || centiseconds <= 0) return "N/A";
+  const totalSeconds = Math.round(centiseconds / 100);
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
-function parseDurationToTenths(val: string): number {
+function parseDurationToCentiseconds(val: string): number {
   const parts = val.split(":").map(Number);
   let seconds = 0;
   if (parts.length === 3) seconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
   else if (parts.length === 2) seconds = (parts[0] * 60) + parts[1];
   else seconds = parseInt(val) || 15;
-  return seconds * 10;
+  return seconds * 100;
 }
 
-function formatTenthsToTime(tenths?: number): string {
-  if (!tenths || tenths <= 0) return "00:00:15";
-  const totalSeconds = Math.round(tenths / 10);
+function formatCentisecondsToTime(centiseconds?: number): string {
+  if (!centiseconds || centiseconds <= 0) return "00:00:15";
+  const totalSeconds = Math.round(centiseconds / 100);
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
@@ -101,10 +101,10 @@ export function MediaDetailPanel() {
 
   const saveMutation = useMutation({
     mutationFn: async ({ name, duration, enabled }: { name: string; duration: string; enabled: boolean }) => {
-      const durationTenths = parseDurationToTenths(duration);
+      const durationCentiseconds = parseDurationToCentiseconds(duration);
       const url = selectedMediaType === "template" ? "/api/templates/set" : "/api/medias/set";
       const key = selectedMediaType === "template" ? "templates" : "medias";
-      const payload = { Id: selectedMediaId, Name: name, Duration: durationTenths, Enabled: enabled };
+      const payload = { Id: selectedMediaId, Name: name, Duration: durationCentiseconds, Enabled: enabled };
       const res = await fetch(API_BASE + url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -255,7 +255,7 @@ export function MediaDetailPanel() {
   const handleStartEdit = () => {
     if (!item) return;
     setEditName(item.Name || "");
-    setEditDuration(formatTenthsToTime(item.Duration));
+    setEditDuration(formatCentisecondsToTime(item.Duration));
     setEditEnabled(item.Enabled !== false);
     setIsEditing(true);
     setActionError(null);

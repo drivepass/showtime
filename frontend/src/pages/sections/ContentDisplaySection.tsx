@@ -42,9 +42,9 @@ function getMediaIcon(item: ContentItem) {
   return <FileIcon className="w-8 h-8 text-[#d1d5db]" />;
 }
 
-function formatDuration(tenths?: number): string {
-  if (!tenths || tenths <= 0) return "";
-  const seconds = Math.round(tenths / 10);
+function formatDuration(centiseconds?: number): string {
+  if (!centiseconds || centiseconds <= 0) return "";
+  const seconds = Math.round(centiseconds / 100);
   if (seconds < 60) return `${seconds}s`;
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;

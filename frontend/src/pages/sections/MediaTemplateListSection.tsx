@@ -141,7 +141,7 @@ function MediaThumbnailCard({ item }: { item: ContentItem }) {
   const thumb = getThumbnailUrl(item);
   const mime = String(item.MimeType || item.Type || "").toLowerCase();
   const isVideo = mime.includes("video");
-  const duration = item.Duration && item.Duration > 0 ? `${Math.round(item.Duration / 10)}s` : "";
+  const duration = item.Duration && item.Duration > 0 ? `${Math.round(item.Duration / 100)}s` : "";
   const typeLabel = item.itemType === "template" ? "Template" : item.itemType === "feed" ? "Data Feed" : isVideo ? "Video" : "Image";
   const [imgError, setImgError] = useState(false);
 
