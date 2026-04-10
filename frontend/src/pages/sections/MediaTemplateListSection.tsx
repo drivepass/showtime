@@ -328,14 +328,20 @@ export const MediaTemplateListSection = (): JSX.Element => {
   const { data: defaultContentData, isLoading: defaultContentLoading } = useQuery({
     queryKey: ["/api/content-default", selectedGroupId],
     queryFn: async () => {
-      if (!selectedGroupId) return { medias: [], templates: [] };
-      const [mediasRes, templatesRes] = await Promise.all([
-        fetch(`${API_BASE}/api/medias?groupId=${selectedGroupId}`, { credentials: "include" }),
-        fetch(`${API_BASE}/api/templates?groupId=${selectedGroupId}`, { credentials: "include" }),
-      ]);
-      const medias = mediasRes.ok ? (await mediasRes.json()).medias || [] : [];
-      const templates = templatesRes.ok ? (await templatesRes.json()).templates || [] : [];
-      return { medias, templates };
+      if (!selectedGroupId) return null;
+      const res = await fetch(`${API_BASE}/api/content-window`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          groupId: selectedGroupId,
+          folderId: 0,
+          folderType: 1,
+        }),
+      });
+      if (res.status === 403) return null;
+      if (!res.ok) throw new Error("Failed to fetch default content window");
+      return res.json();
     },
     enabled: !!selectedGroupId && !selectedFilter,
     refetchInterval: 30000,
@@ -344,17 +350,15 @@ export const MediaTemplateListSection = (): JSX.Element => {
   const folders: Folder[] = foldersData?.folders || [];
   const folderTree = buildFolderTree(folders);
 
-  const allMedia: ContentItem[] = selectedFilter && contentWindowData
+  const activeContent = selectedFilter ? contentWindowData : defaultContentData;
+  const allMedia: ContentItem[] = activeContent
     ? [
-        ...(contentWindowData.medias || []).map((m: any) => ({ ...m, itemType: "media" as const })),
-        ...(contentWindowData.templates || []).map((tt: any) => ({ ...tt, itemType: "template" as const })),
-        ...(contentWindowData.feeds || []).map((f: any) => ({ ...f, itemType: "feed" as const })),
-        ...(contentWindowData.banners || []).map((b: any) => ({ ...b, itemType: "template" as const })),
+        ...(activeContent.medias || []).map((m: any) => ({ ...m, itemType: "media" as const })),
+        ...(activeContent.templates || []).map((tt: any) => ({ ...tt, itemType: "template" as const })),
+        ...(activeContent.feeds || []).map((f: any) => ({ ...f, itemType: "feed" as const })),
+        ...(activeContent.banners || []).map((b: any) => ({ ...b, itemType: "template" as const })),
       ]
-    : [
-        ...(defaultContentData?.medias || []).map((m: any) => ({ ...m, itemType: "media" as const })),
-        ...(defaultContentData?.templates || []).map((tt: any) => ({ ...tt, itemType: "template" as const })),
-      ];
+    : [];
   const contentLoading = selectedFilter ? contentWindowLoading : defaultContentLoading;
 
   const handleSelectFilter = (filter: SelectedFilter | null) => {
