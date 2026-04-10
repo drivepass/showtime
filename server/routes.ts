@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import session from "express-session";
 import crypto from "crypto";
 import { navoriLogin, navoriGetGroups, navoriGetPlayers, navoriGetPlayersById, navoriGetFolders, navoriGetMedias, navoriGetMediasById, navoriGetTemplates, navoriGetTemplatesById, navoriGetPlaylists, navoriGetPlaylistsById, navoriSetPlaylists, navoriSetPlaylistContents, navoriGetPlaylistContents, navoriGetContentWindow, navoriGetTimeSlots, navoriSetTimeSlots, navoriDeleteTimeSlots } from "./navori";
-import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport } from "./navori";
+import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport, navoriUploadFile } from "./navori";
 import { generateCreative, pollVideoResult, addGeneration, updateGeneration, getHistory, requiresTextRendering } from "./aiStudio";
 
 function handleNavoriResult(req: Request, res: Response, result: { success: boolean; error?: string }, dataKey: string, data: any) {
@@ -141,6 +141,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const result = await navoriGetPlayersById(req.session.navoriToken, ids);
+      if (!result.success && result.error === "NOT_AUTHORIZED") {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired. Please log in again." });
+      }
       return handleNavoriResult(req, res, result, "players", result.players);
     } catch {
       return res.status(502).json({ message: "Unable to reach Navori API" });
@@ -199,10 +204,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ folders: result.folders || [] });
       }
 
-      if (result.error === "NOT_AUTHORIZED") {
-        delete req.session.navoriToken;
-        delete req.session.username;
-        return res.status(401).json({ message: "Session expired. Please log in again." });
+      if (result.error !== "NOT_AUTHORIZED") {
+        return res.status(502).json({ message: result.error || "Unable to fetch folders" });
       }
 
       const fallback = await navoriGetContentWindow(req.session.navoriToken, groupId, 0, 1, filter);
@@ -210,13 +213,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ folders: fallback.folders || [] });
       }
 
-      if (fallback.error === "NOT_AUTHORIZED") {
-        delete req.session.navoriToken;
-        delete req.session.username;
-        return res.status(401).json({ message: "Session expired. Please log in again." });
-      }
-
-      return res.status(502).json({ message: result.error || fallback.error || "Unable to fetch folders" });
+      delete req.session.navoriToken;
+      delete req.session.username;
+      return res.status(401).json({ message: "Session expired. Please log in again." });
     } catch (error: any) {
       return res.status(502).json({ message: error?.message || "Unable to reach Navori API" });
     }
@@ -252,13 +251,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!ids || !Array.isArray(ids) || ids.length === 0 || ids.length > 100) {
       return res.status(400).json({ message: "Valid media IDs array required (1-100 items)" });
     }
-    const numericIds = ids.filter((id: any) => typeof id === "number" && Number.isFinite(id) && id > 0);
-    if (numericIds.length !== ids.length) {
+    if (!ids.every((id: any) => typeof id === "number" && Number.isFinite(id) && id > 0)) {
       return res.status(400).json({ message: "All IDs must be positive numbers" });
     }
 
     try {
       const result = await navoriGetMediasById(req.session.navoriToken, ids);
+      if (!result.success && result.error === "NOT_AUTHORIZED") {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired. Please log in again." });
+      }
       return handleNavoriResult(req, res, result, "medias", result.medias);
     } catch {
       return res.status(502).json({ message: "Unable to reach Navori API" });
@@ -319,13 +322,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!ids || !Array.isArray(ids) || ids.length === 0 || ids.length > 100) {
       return res.status(400).json({ message: "Valid template IDs array required (1-100 items)" });
     }
-    const numericIds = ids.filter((id: any) => typeof id === "number" && Number.isFinite(id) && id > 0);
-    if (numericIds.length !== ids.length) {
+    if (!ids.every((id: any) => typeof id === "number" && Number.isFinite(id) && id > 0)) {
       return res.status(400).json({ message: "All IDs must be positive numbers" });
     }
 
     try {
       const result = await navoriGetTemplatesById(req.session.navoriToken, ids);
+      if (!result.success && result.error === "NOT_AUTHORIZED") {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired. Please log in again." });
+      }
       return handleNavoriResult(req, res, result, "templates", result.templates);
     } catch {
       return res.status(502).json({ message: "Unable to reach Navori API" });
@@ -473,20 +480,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.on("end", async () => {
       const body = Buffer.concat(chunks);
       try {
-        const response = await fetch("https://saas.navori.com/NavoriService/api/UploadFile", {
-          method: "POST",
-          headers: {
-            "Content-Type": contentType,
-            "Token": req.session.navoriToken!,
-          },
-          body,
-        });
-        let data: any;
-        try { data = await response.json(); } catch { data = { Status: response.ok ? "SUCCESS" : "FAILED" }; }
-        if (data.Status === "SUCCESS" || response.ok) {
-          return res.json({ success: true, media: data.Media || data });
+        const result = await navoriUploadFile(req.session.navoriToken!, body, contentType);
+        if (!result.success) {
+          return res.status(502).json({ message: result.error || "Upload failed" });
         }
-        return res.status(502).json({ message: data.Status || "Upload failed" });
+        return res.json({ success: true, media: result.media });
       } catch {
         return res.status(502).json({ message: "Unable to reach Navori API" });
       }
@@ -521,13 +519,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!ids || !Array.isArray(ids) || ids.length === 0 || ids.length > 100) {
       return res.status(400).json({ message: "Valid playlist IDs array required (1-100 items)" });
     }
-    const numericIds = ids.filter((id: any) => typeof id === "number" && Number.isFinite(id) && id > 0);
-    if (numericIds.length !== ids.length) {
+    if (!ids.every((id: any) => typeof id === "number" && Number.isFinite(id) && id > 0)) {
       return res.status(400).json({ message: "All IDs must be positive numbers" });
     }
 
     try {
       const result = await navoriGetPlaylistsById(req.session.navoriToken, ids);
+      if (!result.success && result.error === "NOT_AUTHORIZED") {
+        delete req.session.navoriToken;
+        delete req.session.username;
+        return res.status(401).json({ message: "Session expired. Please log in again." });
+      }
       return handleNavoriResult(req, res, result, "playlists", result.playlists);
     } catch {
       return res.status(502).json({ message: "Unable to reach Navori API" });

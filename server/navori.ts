@@ -546,6 +546,9 @@ export async function navoriGetTimeSlots(token: string, groupId: number, fromDat
   }
 
   if (data.Status === "SUCCESS") {
+    if (data.TimeSlotList === undefined && data.TimeSlots === undefined && data.ListTimeSlot === undefined) {
+      console.warn("[navori] GetTimeSlots: none of TimeSlotList/TimeSlots/ListTimeSlot present in response. Keys:", Object.keys(data));
+    }
     return {
       success: true,
       timeslots: data.TimeSlotList || data.TimeSlots || data.ListTimeSlot || [],
@@ -671,8 +674,6 @@ export async function navoriRemoteSettings(token: string, playerIds: number[], a
 
   const payload = { PlayerList: playerList };
 
-  console.log(`[navori] SetPlayers (remote command) request: ${JSON.stringify(payload)}`);
-
   const response = await fetch(`${NAVORI_API_URL}SetPlayers`, {
     method: "POST",
     headers: {
@@ -684,9 +685,7 @@ export async function navoriRemoteSettings(token: string, playerIds: number[], a
 
   let data: any;
   try {
-    const text = await response.text();
-    console.log(`[navori] SetPlayers response (${response.status}): ${text}`);
-    data = JSON.parse(text);
+    data = await response.json();
   } catch {
     return { success: false, error: "Invalid response from Navori API" };
   }
@@ -717,9 +716,7 @@ export async function navoriGetContentReport(token: string, params: {
 
   let data: any;
   try {
-    const text = await response.text();
-    console.log(`[navori] GetContentReport response (${response.status}): ${text.substring(0, 200)}`);
-    data = JSON.parse(text);
+    data = await response.json();
   } catch {
     return { Status: "ERROR", error: "Invalid response" };
   }
@@ -743,11 +740,33 @@ export async function navoriGetAudienceReport(token: string, params: {
 
   let data: any;
   try {
-    const text = await response.text();
-    console.log(`[navori] GetAudienceReport response (${response.status}): ${text.substring(0, 200)}`);
-    data = JSON.parse(text);
+    data = await response.json();
   } catch {
     return { Status: "ERROR", error: "Invalid response" };
   }
   return data;
+}
+
+export async function navoriUploadFile(token: string, body: Buffer, contentType: string): Promise<{ success: boolean; media?: any; error?: string }> {
+  const response = await fetch(`${NAVORI_API_URL}UploadFile`, {
+    method: "POST",
+    headers: {
+      "Content-Type": contentType,
+      "Token": token,
+    },
+    body,
+  });
+
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    data = { Status: response.ok ? "SUCCESS" : "FAILED" };
+  }
+
+  if (data.Status === "SUCCESS" || response.ok) {
+    return { success: true, media: data.Media || data };
+  }
+
+  return { success: false, error: data.Status || "Upload failed" };
 }
