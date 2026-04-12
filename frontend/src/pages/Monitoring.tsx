@@ -22,6 +22,11 @@ interface Player {
   PlayerVersion?: string;
   Resolution?: string;
   Status?: string;
+  Plan?: string;
+  SerialNumber?: string;
+  TechnicalProfileId?: number;
+  Model?: string;
+  FreeSpace?: string;
 }
 
 type PlayerStatus = "online" | "warning" | "offline" | "unknown";
@@ -42,10 +47,41 @@ const STATUS_CONFIG: Record<PlayerStatus, { dot: string; label: string; badgeLig
   unknown: { dot: "bg-gray-400",   label: "Unknown", badgeLight: "bg-gray-100 text-gray-500",    badgeDark: "bg-gray-500/10 text-gray-400" },
 };
 
+function formatLastNotify(lastNotify?: string): string {
+  if (!lastNotify || lastNotify.startsWith("0001-01-01")) return "\u2014";
+  const d = new Date(lastNotify);
+  if (isNaN(d.getTime())) return "\u2014";
+  return d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+}
+
+function getDownloadStatus(player: Player): string {
+  if (!player.LastNotify || player.LastNotify.startsWith("0001-01-01")) return "\u2014";
+  const ago = Date.now() - new Date(player.LastNotify).getTime();
+  if (ago <= 24 * 60 * 60 * 1000) return "Done";
+  return "\u2014";
+}
+
 interface PlayerGroup {
   Id: number;
   Name: string;
 }
+
+const TABLE_COLUMNS = [
+  { key: "group",     label: "Group",      minW: "min-w-[120px]" },
+  { key: "players",   label: "Players",    minW: "min-w-[140px]" },
+  { key: "date",      label: "Date",       minW: "min-w-[90px]" },
+  { key: "by",        label: "By",         minW: "min-w-[60px]" },
+  { key: "status",    label: "Status",     minW: "min-w-[80px]" },
+  { key: "display",   label: "Display",    minW: "min-w-[60px]" },
+  { key: "player",    label: "Player",     minW: "min-w-[120px]" },
+  { key: "playlist",  label: "Playlist",   minW: "min-w-[80px]" },
+  { key: "model",     label: "Model",      minW: "min-w-[80px]" },
+  { key: "os",        label: "OS",         minW: "min-w-[80px]" },
+  { key: "version",   label: "Version",    minW: "min-w-[80px]" },
+  { key: "profile",   label: "Profile",    minW: "min-w-[80px]" },
+  { key: "freespace", label: "Free Space", minW: "min-w-[80px]" },
+  { key: "plan",      label: "Plan",       minW: "min-w-[80px]" },
+] as const;
 
 function GroupTreeItem({ group, selectedId, onSelect }: { group: PlayerGroup; selectedId: number | null; onSelect: (id: number) => void }) {
   const { t, isDark } = useTheme();
@@ -186,8 +222,11 @@ function MonitoringContent() {
 
   const isActionPending = publishMutation.isPending || remoteSettingsMutation.isPending;
 
+  const thCls = `text-left px-3 py-2.5 font-bold text-[9px] uppercase tracking-wider whitespace-nowrap ${isDark ? "text-[#546e7a]" : "text-[#334155]"}`;
+  const tdCls = `px-3 py-2 text-[10px] whitespace-nowrap ${isDark ? "text-[#8fa4b5]" : "text-gray-600"}`;
+
   return (
-    <div className={`${t.pageBg} w-full min-w-[1728px] min-h-screen flex flex-col ${t.textPrimary}`}>
+    <div className={`${t.pageBg} w-full min-h-screen flex flex-col ${t.textPrimary}`}>
       <TopNavigationBarSection activeTab="monitoring" />
 
       <div className="flex flex-1 overflow-hidden">
@@ -342,33 +381,30 @@ function MonitoringContent() {
           </div>
 
           <div className="flex-1 overflow-auto">
-            <table className="w-full text-[11px]">
+            <table className="w-full text-[11px] table-fixed" style={{ minWidth: "1400px" }}>
               <thead className={`sticky top-0 z-10 ${isDark ? "bg-[#0e1620]" : "bg-white"}`}>
                 <tr className={`border-b ${t.border}`}>
-                  <th className={`text-left px-2 py-3 font-bold text-[10px] uppercase ${isDark ? "text-[#546e7a]" : "text-[#334155]"} w-8`}></th>
-                  <th className={`text-left px-4 py-3 font-bold text-[10px] uppercase ${isDark ? "text-[#546e7a]" : "text-[#334155]"} w-[200px]`}>Player Name</th>
-                  <th className={`text-left px-4 py-3 font-bold text-[10px] uppercase ${isDark ? "text-[#546e7a]" : "text-[#334155]"} border-l ${isDark ? "border-[#1e2e3e]" : "border-[#f3f4f6]"}`}>Group / Last Connection</th>
-                  <th className={`text-left px-4 py-3 font-bold text-[10px] uppercase ${isDark ? "text-[#546e7a]" : "text-[#334155]"} border-l ${isDark ? "border-[#1e2e3e]" : "border-[#f3f4f6]"}`}>Status</th>
+                  <th className={`${thCls} w-8`}></th>
+                  {TABLE_COLUMNS.map((col) => (
+                    <th key={col.key} className={`${thCls} ${col.minW}`}>{col.label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={4} className="text-center py-20">
+                    <td colSpan={TABLE_COLUMNS.length + 1} className="text-center py-20">
                       <Loader2Icon className={`w-5 h-5 ${t.textFaint} animate-spin mx-auto`} />
                     </td>
                   </tr>
                 ) : filteredPlayers.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className={`text-center py-20 text-sm ${t.textFaint}`}>
-                      No players found
+                    <td colSpan={TABLE_COLUMNS.length + 1} className={`text-center py-20 text-sm ${t.textFaint}`}>
+                      {selectedGroupId ? "No players in this group" : "Select a group to view players"}
                     </td>
                   </tr>
                 ) : (
                   filteredPlayers.map((player, idx) => {
-                    const lastConn = player.LastConnection
-                      ? new Date(player.LastConnection).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })
-                      : "—";
                     const isSelected = selectedPlayerIds.includes(player.Id);
                     const status = getPlayerStatus(player);
                     const cfg = STATUS_CONFIG[status];
@@ -384,39 +420,51 @@ function MonitoringContent() {
                         onClick={() => togglePlayerSelection(player.Id)}
                         data-testid={`row-player-${player.Id}`}
                       >
-                        <td className="px-2 py-2.5 text-center">
+                        {/* Checkbox */}
+                        <td className="px-2 py-2 text-center w-8">
                           <div className={`w-4 h-4 rounded border ${isSelected ? "bg-[#2997cc] border-[#2997cc]" : isDark ? "border-[#546e7a]" : "border-gray-300"} flex items-center justify-center mx-auto`}>
                             {isSelected && (
                               <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 6l3 3 5-5" /></svg>
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                            <span className={`text-[11px] font-medium ${isDark ? "text-[#c8d2e0]" : "text-gray-700"}`} data-testid={`text-player-name-${player.Id}`}>
-                              {player.Name}
-                            </span>
+                        {/* GROUP */}
+                        <td className={tdCls}>{player.GroupName || "\u2014"}</td>
+                        {/* PLAYERS */}
+                        <td className={`${tdCls} !text-[11px] font-medium ${isDark ? "!text-[#c8d2e0]" : "!text-gray-700"}`}>
+                          <div className="flex items-center gap-1.5">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                            <span className="truncate" data-testid={`text-player-name-${player.Id}`}>{player.Name}</span>
                           </div>
                         </td>
-                        <td className={`px-4 py-2.5 border-l ${isDark ? "border-[#1e2e3e]" : "border-[#f3f4f6]"}`}>
-                          <div className={`text-[11px] ${isDark ? "text-[#c8d2e0]" : "text-gray-600"}`}>
-                            <div>{player.GroupName || "—"}</div>
-                            <div className={`text-[10px] ${t.textDim}`}>{lastConn}</div>
-                          </div>
+                        {/* DATE */}
+                        <td className={tdCls}>{formatLastNotify(player.LastNotify)}</td>
+                        {/* BY */}
+                        <td className={tdCls}>{"\u2014"}</td>
+                        {/* STATUS */}
+                        <td className={tdCls}>
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ${isDark ? cfg.badgeDark : cfg.badgeLight}`} data-testid={`status-player-${player.Id}`}>
+                            {getDownloadStatus(player) === "Done" ? "Done" : cfg.label}
+                          </span>
                         </td>
-                        <td className={`px-4 py-2.5 border-l ${isDark ? "border-[#1e2e3e]" : "border-[#f3f4f6]"}`}>
-                          <div className="flex items-center gap-2">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${
-                              isDark ? cfg.badgeDark : cfg.badgeLight
-                            }`} data-testid={`status-player-${player.Id}`}>
-                              {cfg.label}
-                            </span>
-                            {player.Resolution && (
-                              <span className={`text-[10px] ${t.textDim}`}>{player.Resolution}</span>
-                            )}
-                          </div>
-                        </td>
+                        {/* DISPLAY */}
+                        <td className={tdCls}>{"\u2014"}</td>
+                        {/* PLAYER (serial/hardware) */}
+                        <td className={tdCls}>{player.SerialNumber || "\u2014"}</td>
+                        {/* PLAYLIST */}
+                        <td className={tdCls}>{"\u2014"}</td>
+                        {/* MODEL */}
+                        <td className={tdCls}>{player.Model || "\u2014"}</td>
+                        {/* OS */}
+                        <td className={tdCls}>{player.OsVersion || "\u2014"}</td>
+                        {/* VERSION */}
+                        <td className={tdCls}>{player.PlayerVersion || "\u2014"}</td>
+                        {/* PROFILE */}
+                        <td className={tdCls}>{player.TechnicalProfileId ? `Profile ${player.TechnicalProfileId}` : "Default"}</td>
+                        {/* FREE SPACE */}
+                        <td className={tdCls}>{player.FreeSpace || "\u2014"}</td>
+                        {/* PLAN */}
+                        <td className={tdCls}>{player.Plan || "\u2014"}</td>
                       </tr>
                     );
                   })

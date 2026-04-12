@@ -134,26 +134,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return handleNavoriResult(req, res, result, "players", result.players);
       }
 
-      // Enrich with LastNotify from GetPlayersById for real-time online status
+      // Enrich with detail fields from GetPlayersById for monitoring dashboard
       try {
         const ids = result.players.map((p: any) => p.Id);
         const detailResult = await navoriGetPlayersById(req.session.navoriToken, ids);
         if (detailResult.success && detailResult.players?.length) {
-          const notifyMap = new Map<number, string>();
+          const detailMap = new Map<number, any>();
           for (const dp of detailResult.players) {
-            if (dp.Id != null && dp.LastNotify != null) {
-              notifyMap.set(dp.Id, dp.LastNotify);
-            }
+            if (dp.Id != null) detailMap.set(dp.Id, dp);
           }
+          const enrichFields = [
+            "LastNotify", "Plan", "SerialNumber", "TechnicalProfileId",
+            "OsVersion", "PlayerVersion", "Model", "FreeSpace",
+            "Resolution", "IpAddress", "LastConnection",
+          ];
           for (const p of result.players) {
-            const lastNotify = notifyMap.get(p.Id);
-            if (lastNotify !== undefined) {
-              p.LastNotify = lastNotify;
+            const detail = detailMap.get(p.Id);
+            if (detail) {
+              for (const field of enrichFields) {
+                if (detail[field] != null && !p[field]) {
+                  p[field] = detail[field];
+                }
+              }
             }
           }
         }
       } catch {
-        // If enrichment fails, return players without LastNotify — frontend handles missing values
+        // If enrichment fails, return players without detail fields — frontend handles missing values
       }
 
       return handleNavoriResult(req, res, result, "players", result.players);
