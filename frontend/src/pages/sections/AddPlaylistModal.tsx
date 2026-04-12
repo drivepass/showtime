@@ -96,6 +96,7 @@ export function AddPlaylistModal({ isOpen, onClose }: AddPlaylistModalProps) {
         await apiRequest("POST", "/api/playlists/contents/set", {
           contents: [
             {
+              Id: 0,
               PlaylistId: playlistId,
               ContentId: selectedMediaId,
               Type: selectedMediaType === "template" ? "Template" : "Media",

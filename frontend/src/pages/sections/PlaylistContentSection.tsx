@@ -248,6 +248,7 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
       const media = JSON.parse(raw);
       const payload = {
         contents: [{
+          Id: 0,
           PlaylistId: playlist.Id,
           ContentId: media.Id,
           Type: media.Type === "template" ? "Template" : "Media",
