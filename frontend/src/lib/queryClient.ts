@@ -23,21 +23,32 @@ async function tryRefreshToken(): Promise<boolean> {
   return refreshPromise;
 }
 
-async function handleUnauthorized(res: Response, url: string, options: RequestInit): Promise<Response | null> {
+/**
+ * Fetch wrapper that handles 409 (token refreshed, retry) and 401 (session expired).
+ * Use this instead of raw fetch() for any authenticated API call.
+ */
+export async function fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
+  const opts = { ...options, credentials: options.credentials || ("include" as RequestCredentials) };
+  let res = await fetch(url, opts);
+
+  // 409 = server already refreshed the Navori token, just retry after a brief delay
+  if (res.status === 409) {
+    console.log("[fetchWithRetry] 409 received, retrying in 800ms:", url);
+    await new Promise(r => setTimeout(r, 800));
+    res = await fetch(url, opts);
+  }
+
+  // 401 = token expired, try client-side refresh then retry
   if (res.status === 401) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
-      // Retry the original request with the refreshed session
-      return fetch(url, options);
+      res = await fetch(url, opts);
+    } else {
+      window.dispatchEvent(new CustomEvent("auth:expired"));
     }
-    window.dispatchEvent(new CustomEvent("auth:expired"));
-    return null;
   }
-  if (res.status === 409) {
-    // Server refreshed the token — retry the original request
-    return fetch(url, options);
-  }
-  return null;
+
+  return res;
 }
 
 async function throwIfResNotOk(res: Response) {
@@ -60,13 +71,7 @@ export async function apiRequest(
     credentials: "include",
   };
 
-  let res = await fetch(fullUrl, options);
-
-  if (res.status === 401 || res.status === 409) {
-    const retried = await handleUnauthorized(res, fullUrl, options);
-    if (retried) res = retried;
-  }
-
+  const res = await fetchWithRetry(fullUrl, options);
   await throwIfResNotOk(res);
   return res;
 }
@@ -80,12 +85,7 @@ export const getQueryFn: <T>(options: {
     const fullUrl = API_BASE + (queryKey.join("/") as string);
     const options: RequestInit = { credentials: "include" };
 
-    let res = await fetch(fullUrl, options);
-
-    if (res.status === 401 || res.status === 409) {
-      const retried = await handleUnauthorized(res, fullUrl, options);
-      if (retried) res = retried;
-    }
+    const res = await fetchWithRetry(fullUrl, options);
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;

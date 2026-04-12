@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { useTheme } from "@/hooks/use-theme";
 import { AddPlaylistModal } from "./AddPlaylistModal";
-import { API_BASE } from "@/lib/queryClient";
+import { API_BASE, fetchWithRetry } from "@/lib/queryClient";
 
 interface Playlist {
   Id: number;
@@ -255,7 +255,7 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
         }],
       };
       console.log("[PLAYLIST DROP] payload:", JSON.stringify(payload));
-      const res = await fetch(`${API_BASE}/api/playlists/contents/set`, {
+      const res = await fetchWithRetry(`${API_BASE}/api/playlists/contents/set`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -264,6 +264,7 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
       if (res.ok) {
         console.log("[PLAYLIST DROP] success");
         queryClient.invalidateQueries({ queryKey: ["/api/playlists", playlist.Id, "contents"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
         if (!expanded) setExpanded(true);
       } else {
         const errorData = await res.json().catch(() => ({}));

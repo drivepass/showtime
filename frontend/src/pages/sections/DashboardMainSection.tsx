@@ -5,7 +5,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useGroupSelection } from "@/hooks/use-group-selection";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PreviewModal } from "./PreviewModal";
-import { API_BASE } from "@/lib/queryClient";
+import { API_BASE, fetchWithRetry } from "@/lib/queryClient";
 
 const timeSlots = ["07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18"];
 
@@ -110,7 +110,7 @@ export const DashboardMainSection = (): JSX.Element => {
   // Mutation for saving time slots
   const saveTimeSlotsMutation = useMutation({
     mutationFn: async (timeslots: any[]) => {
-      const res = await fetch(API_BASE + "/api/timeslots/set", {
+      const res = await fetchWithRetry(API_BASE + "/api/timeslots/set", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ timeslots }),
@@ -123,7 +123,7 @@ export const DashboardMainSection = (): JSX.Element => {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/timeslots", selectedGroupId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/timeslots", selectedGroupId, fromDate, toDate] });
     },
     onError: (error: Error) => {
       console.error("Failed to save timeslot:", error);
@@ -134,7 +134,7 @@ export const DashboardMainSection = (): JSX.Element => {
   // Mutation for deleting time slots
   const deleteTimeSlotsMutation = useMutation({
     mutationFn: async (timeSlotIds: number[]) => {
-      const res = await fetch(API_BASE + "/api/timeslots/delete", {
+      const res = await fetchWithRetry(API_BASE + "/api/timeslots/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ timeSlotIds }),
@@ -147,7 +147,7 @@ export const DashboardMainSection = (): JSX.Element => {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/timeslots", selectedGroupId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/timeslots", selectedGroupId, fromDate, toDate] });
     },
   });
 
