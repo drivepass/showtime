@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import crypto from "crypto";
 import { navoriLogin, navoriGetGroups, navoriGetPlayers, navoriGetPlayersById, navoriGetFolders, navoriGetMedias, navoriGetMediasById, navoriGetTemplates, navoriGetTemplatesById, navoriGetPlaylists, navoriGetPlaylistsById, navoriSetPlaylists, navoriSetPlaylistContents, navoriGetPlaylistContents, navoriGetContentWindow, navoriGetTimeSlots, navoriSetTimeSlots, navoriDeleteTimeSlots } from "./navori";
 import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport, navoriUploadFile } from "./navori";
@@ -26,10 +27,16 @@ declare module "express-session" {
 export async function registerRoutes(app: Express): Promise<Server> {
   const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 
+  const PgStore = connectPgSimple(session);
+
   app.set("trust proxy", 1);
 
   app.use(
     session({
+      store: new PgStore({
+        conString: process.env.DATABASE_URL,
+        createTableIfMissing: true,
+      }),
       secret: sessionSecret,
       name: "navori.sid",
       resave: false,
@@ -630,9 +637,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const result = await navoriGetTimeSlots(req.session.navoriToken, groupId, fromDate, toDate);
-      return handleNavoriResult(req, res, result, "timeslots", result.timeslots);
+      if (!result.success) {
+        return res.json({ timeslots: [] });
+      }
+      return res.json({ timeslots: result.timeslots || [] });
     } catch {
-      return res.status(502).json({ message: "Unable to reach Navori API" });
+      return res.json({ timeslots: [] });
     }
   });
 
