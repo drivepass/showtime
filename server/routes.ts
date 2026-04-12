@@ -682,15 +682,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      console.log("[PLAYLIST CONTENTS SET]", JSON.stringify(req.body));
-      const result = await navoriSetPlaylistContents(req.session.navoriToken, contents);
-      console.log("[PLAYLIST CONTENTS RESULT]", JSON.stringify(result));
-      if (!result.success) {
-        if (result.error === "NOT_AUTHORIZED") {
+      console.log("[PLAYLIST CONTENTS SET] incoming:", JSON.stringify(req.body));
+
+      // Group new items by playlist so we can fetch+append for each
+      const byPlaylist = new Map<number, typeof contents>();
+      for (const item of contents) {
+        const list = byPlaylist.get(item.PlaylistId) || [];
+        list.push(item);
+        byPlaylist.set(item.PlaylistId, list);
+      }
+
+      for (const [playlistId, newItems] of byPlaylist) {
+        // 1. GET existing contents for this playlist
+        const existing = await navoriGetPlaylistContents(req.session.navoriToken!, playlistId);
+        if (!existing.success && existing.error === "NOT_AUTHORIZED") {
           return handleExpiredToken(req, res);
         }
-        return res.status(502).json({ message: result.error || "Unable to save playlist contents" });
+        const existingContents: any[] = existing.contents || [];
+        console.log("[PLAYLIST CONTENTS SET] existing for playlist", playlistId, ":", existingContents.length, "items");
+
+        // 2. Append new items with correct Index values
+        const merged = [...existingContents];
+        for (const newItem of newItems) {
+          merged.push({
+            Id: 0,
+            ContentId: newItem.ContentId,
+            Index: merged.length,
+            PlaylistId: playlistId,
+            Type: newItem.Type,
+          });
+        }
+
+        // 3. SET the complete array back to Navori
+        console.log("[PLAYLIST CONTENTS SET] sending merged:", JSON.stringify(merged));
+        const result = await navoriSetPlaylistContents(req.session.navoriToken!, merged);
+        console.log("[PLAYLIST CONTENTS RESULT]", JSON.stringify(result));
+        if (!result.success) {
+          if (result.error === "NOT_AUTHORIZED") {
+            return handleExpiredToken(req, res);
+          }
+          return res.status(502).json({ message: result.error || "Unable to save playlist contents" });
+        }
       }
+
       return res.json({ success: true });
     } catch (err) {
       console.error("[PLAYLIST CONTENTS SET ERROR]", err);
