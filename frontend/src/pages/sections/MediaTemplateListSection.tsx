@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useGroupSelection } from "@/hooks/use-group-selection";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SearchIcon, Loader2Icon } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useMediaSelection } from "@/hooks/use-media-selection";
@@ -183,10 +183,10 @@ function MediaThumbnailCard({ item }: { item: ContentItem }) {
   const [imgError, setImgError] = useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData("application/x-showtime-media", JSON.stringify({
+    e.dataTransfer.setData("mediaItem", JSON.stringify({
       Id: item.Id,
       Name: item.Name,
-      itemType: item.itemType,
+      Type: item.itemType,
       Duration: item.Duration,
     }));
     e.dataTransfer.effectAllowed = "copy";
@@ -312,6 +312,7 @@ export const MediaTemplateListSection = (): JSX.Element => {
   const { selectedGroupId, selectedGroupName } = useGroupSelection();
   const { t, isDark } = useTheme();
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [selectedFilter, setSelectedFilter] = useState<SelectedFilter | null>(null);
   const [addMediaDropdownOpen, setAddMediaDropdownOpen] = useState(false);
   const [contentModalType, setContentModalType] = useState<"url" | "video" | "hdmi" | null>(null);
@@ -644,11 +645,21 @@ export const MediaTemplateListSection = (): JSX.Element => {
       {contentModalType && (
         <AddContentModal
           isOpen={true}
-          onClose={() => setContentModalType(null)}
+          onClose={() => {
+            setContentModalType(null);
+            queryClient.invalidateQueries({ queryKey: ["/api/content-window"], refetchType: "all" });
+            queryClient.invalidateQueries({ queryKey: ["/api/content-default"], refetchType: "all" });
+          }}
           type={contentModalType}
         />
       )}
-      <UploadFileModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} />
+      <UploadFileModal isOpen={showUploadModal} onClose={() => {
+        setShowUploadModal(false);
+        queryClient.invalidateQueries({ queryKey: ["/api/content-window"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["/api/content-default"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["/api/folders"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["/api/medias"], refetchType: "all" });
+      }} />
     </div>
   );
 };

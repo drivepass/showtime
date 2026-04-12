@@ -210,20 +210,28 @@ export function UploadFileModal({ isOpen, onClose }: { isOpen: boolean; onClose:
         const formData = new FormData();
         formData.append("file", file);
         if (selectedGroupId) formData.append("groupId", String(selectedGroupId));
+        console.log("[UPLOAD] starting:", file.name, "groupId:", selectedGroupId);
         const res = await fetch(API_BASE + "/api/medias/upload", {
           method: "POST",
           credentials: "include",
           body: formData,
         });
         const data = await res.json();
+        console.log("[UPLOAD RESPONSE]", res.status, data);
         if (data.success) {
           newResults.push({ name: file.name, success: true });
         } else {
-          newResults.push({ name: file.name, success: false, message: data.message || "Upload failed" });
+          const msg = data.message || "Upload failed";
+          console.error("[UPLOAD FAILED]", file.name, msg);
+          newResults.push({ name: file.name, success: false, message: msg });
         }
-      } catch {
-        newResults.push({ name: file.name, success: false, message: "Network error" });
+      } catch (err: any) {
+        console.error("[UPLOAD ERROR]", file.name, err);
+        newResults.push({ name: file.name, success: false, message: err?.message || "Network error" });
       }
+    }
+    if (newResults.length > 0 && !newResults.some(r => r.success)) {
+      window.alert("Upload failed: " + (newResults[0]?.message || "Unknown error"));
     }
     setResults(newResults);
     setUploading(false);

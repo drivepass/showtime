@@ -125,6 +125,10 @@ export const DashboardMainSection = (): JSX.Element => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/timeslots", selectedGroupId] });
     },
+    onError: (error: Error) => {
+      console.error("Failed to save timeslot:", error);
+      window.alert("Failed to save to schedule: " + error.message);
+    },
   });
 
   // Mutation for deleting time slots
@@ -422,17 +426,23 @@ export const DashboardMainSection = (): JSX.Element => {
                           const startTime = `${String(hourNum).padStart(2, "0")}:00:00`;
                           const endHour = Math.min(hourNum + 1, 18);
                           const endTime = `${String(endHour).padStart(2, "0")}:00:00`;
-                          saveTimeSlotsMutation.mutate([{
+                          const dateStr = formatDateYYYYMMDD(dayData.date);
+                          const payload = [{
                             Id: 0,
                             GroupId: selectedGroupId,
                             PlaylistId: playlist.Id,
                             DayOfWeek: dayData.dayIndex,
                             StartTime: startTime,
                             EndTime: endTime,
+                            FromDate: dateStr,
+                            ToDate: dateStr,
                             Color: "#2997cc",
-                          }]);
-                        } catch {
-                          // drop failed silently
+                          }];
+                          console.log("[TIMESLOT DROP] payload:", JSON.stringify(payload));
+                          saveTimeSlotsMutation.mutate(payload);
+                        } catch (err: any) {
+                          console.error("Failed to process drop:", err);
+                          window.alert("Failed to add to schedule: " + (err?.message || "Unknown error"));
                         }
                       }}
                     />

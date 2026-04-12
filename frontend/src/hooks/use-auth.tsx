@@ -40,6 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleExpired = () => {
       setUser(null);
       setToken(null);
+      // Redirect to login immediately to prevent cascading 401 errors
+      if (window.location.pathname !== "/" && window.location.pathname !== "/login") {
+        window.location.href = "/";
+      }
     };
     window.addEventListener("auth:expired", handleExpired);
     return () => window.removeEventListener("auth:expired", handleExpired);

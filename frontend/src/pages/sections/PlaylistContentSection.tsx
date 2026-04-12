@@ -228,7 +228,7 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
   }, 0);
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes("application/x-showtime-media")) {
+    if (e.dataTransfer.types.includes("mediaitem") || e.dataTransfer.types.includes("mediaItem")) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
       setDragOver(true);
@@ -242,29 +242,37 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const raw = e.dataTransfer.getData("application/x-showtime-media");
+    const raw = e.dataTransfer.getData("mediaItem");
     if (!raw) return;
     try {
       const media = JSON.parse(raw);
+      const payload = {
+        contents: [{
+          PlaylistId: playlist.Id,
+          ContentId: media.Id,
+          Type: media.Type === "template" ? "Template" : "Media",
+          Index: contents.length,
+        }],
+      };
+      console.log("[PLAYLIST DROP] payload:", JSON.stringify(payload));
       const res = await fetch(`${API_BASE}/api/playlists/contents/set`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          contents: [{
-            PlaylistId: playlist.Id,
-            ContentId: media.Id,
-            Type: media.itemType === "template" ? "Template" : "Media",
-            Index: contents.length,
-          }],
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
+        console.log("[PLAYLIST DROP] success");
         queryClient.invalidateQueries({ queryKey: ["/api/playlists", playlist.Id, "contents"] });
         if (!expanded) setExpanded(true);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("[PLAYLIST DROP] failed:", res.status, errorData);
+        window.alert("Failed to add media to playlist: " + (errorData.message || `HTTP ${res.status}`));
       }
-    } catch {
-      // drop failed silently
+    } catch (err: any) {
+      console.error("Failed to add to playlist:", err);
+      window.alert("Failed to add media to playlist: " + (err?.message || "Unknown error"));
     }
   };
 

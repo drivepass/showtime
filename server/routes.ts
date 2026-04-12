@@ -8,20 +8,38 @@ import { navoriLogin, navoriGetGroups, navoriGetPlayers, navoriGetPlayersById, n
 import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport, navoriUploadFile } from "./navori";
 import { generateCreative, pollVideoResult, addGeneration, updateGeneration, getHistory, requiresTextRendering } from "./aiStudio";
 
-function handleNavoriResult(req: Request, res: Response, result: { success: boolean; error?: string }, dataKey: string, data: any) {
-  if (!result.success) {
-    if (result.error === "NOT_AUTHORIZED") {
-      return res.status(403).json({ message: "Not authorized for this resource" });
-    }
-    return res.status(502).json({ message: result.error });
+const CIPHER_ALGO = "aes-256-gcm";
+
+function deriveKey(secret: string): Buffer {
+  return crypto.createHash("sha256").update(secret).digest();
+}
+
+function encryptPassword(password: string, secret: string): string {
+  const key = deriveKey(secret);
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(CIPHER_ALGO, key, iv);
+  const encrypted = Buffer.concat([cipher.update(password, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv.toString("hex"), encrypted.toString("hex"), tag.toString("hex")].join(":");
+}
+
+function decryptPassword(encrypted: string, secret: string): string | null {
+  try {
+    const [ivHex, encHex, tagHex] = encrypted.split(":");
+    const key = deriveKey(secret);
+    const decipher = crypto.createDecipheriv(CIPHER_ALGO, key, Buffer.from(ivHex, "hex"));
+    decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+    return decipher.update(Buffer.from(encHex, "hex"), undefined, "utf8") + decipher.final("utf8");
+  } catch {
+    return null;
   }
-  return res.json({ [dataKey]: data });
 }
 
 declare module "express-session" {
   interface SessionData {
     navoriToken?: string;
     username?: string;
+    encryptedPassword?: string;
   }
 }
 
@@ -57,6 +75,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     })
   );
 
+  // ── Token refresh helpers ──────────────────────────────────────
+  async function refreshNavoriToken(req: Request): Promise<boolean> {
+    if (!req.session.username || !req.session.encryptedPassword) return false;
+    const password = decryptPassword(req.session.encryptedPassword, sessionSecret);
+    if (!password) return false;
+    try {
+      const result = await navoriLogin(req.session.username, password);
+      if (result.success && result.token) {
+        req.session.navoriToken = result.token;
+        return true;
+      }
+    } catch {}
+    return false;
+  }
+
+  function clearSession(req: Request) {
+    delete req.session.navoriToken;
+    delete req.session.username;
+    delete req.session.encryptedPassword;
+  }
+
+  async function handleExpiredToken(req: Request, res: Response): Promise<Response> {
+    const refreshed = await refreshNavoriToken(req);
+    if (refreshed) {
+      return res.status(409).json({ message: "Token refreshed, please retry", retryable: true });
+    }
+    clearSession(req);
+    return res.status(401).json({ message: "Session expired. Please log in again." });
+  }
+
+  function handleNavoriResult(req: Request, res: Response, result: { success: boolean; error?: string }, dataKey: string, data: any) {
+    if (!result.success) {
+      if (result.error === "NOT_AUTHORIZED") {
+        return handleExpiredToken(req, res);
+      }
+      return res.status(502).json({ message: result.error });
+    }
+    return res.json({ [dataKey]: data });
+  }
+
+  // Proactive token refresh middleware — handles container restarts
+  app.use("/api", async (req, res, next) => {
+    if (req.path.startsWith("/auth/")) return next();
+    if (!req.session.navoriToken && req.session.encryptedPassword && req.session.username) {
+      await refreshNavoriToken(req);
+    }
+    next();
+  });
+
   app.post("/api/auth/login", async (req, res) => {
     const { username, password } = req.body;
 
@@ -77,6 +144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     req.session.navoriToken = result.token;
     req.session.username = username;
+    req.session.encryptedPassword = encryptPassword(password, sessionSecret);
     req.session.save((saveErr) => {
       if (saveErr) {
         return res.status(500).json({ message: "Session error" });
@@ -102,6 +170,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.status(401).json({ message: "Not authenticated" });
   });
 
+  app.post("/api/auth/refresh", async (req, res) => {
+    if (!req.session.username || !req.session.encryptedPassword) {
+      return res.status(401).json({ message: "No stored credentials" });
+    }
+    const refreshed = await refreshNavoriToken(req);
+    if (refreshed) {
+      return res.json({ user: { username: req.session.username }, token: req.session.navoriToken });
+    }
+    clearSession(req);
+    return res.status(401).json({ message: "Refresh failed. Please log in again." });
+  });
+
   app.get("/api/groups", async (req, res) => {
     if (!req.session.navoriToken) {
       return res.status(401).json({ message: "Not authenticated" });
@@ -112,9 +192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = await navoriGetGroups(req.session.navoriToken, filter);
       if (!result.success && result.error === "NOT_AUTHORIZED") {
-        delete req.session.navoriToken;
-        delete req.session.username;
-        return res.status(401).json({ message: "Session expired. Please log in again." });
+        return handleExpiredToken(req, res);
       }
       return handleNavoriResult(req, res, result, "groups", result.groups);
     } catch {
@@ -132,9 +210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = await navoriGetPlayers(req.session.navoriToken, filter);
       if (!result.success && result.error === "NOT_AUTHORIZED") {
-        delete req.session.navoriToken;
-        delete req.session.username;
-        return res.status(401).json({ message: "Session expired. Please log in again." });
+        return handleExpiredToken(req, res);
       }
       if (!result.success || !result.players?.length) {
         return handleNavoriResult(req, res, result, "players", result.players);
@@ -188,9 +264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = await navoriGetPlayersById(req.session.navoriToken, ids);
       if (!result.success && result.error === "NOT_AUTHORIZED") {
-        delete req.session.navoriToken;
-        delete req.session.username;
-        return res.status(401).json({ message: "Session expired. Please log in again." });
+        return handleExpiredToken(req, res);
       }
       return handleNavoriResult(req, res, result, "players", result.players);
     } catch {
@@ -215,8 +289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriGetContentWindow(req.session.navoriToken, groupId, folderId, folderType || 1, filter);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          return res.status(403).json({ message: "Session expired" });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Navori API error" });
       }
@@ -259,9 +332,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ folders: fallback.folders || [] });
       }
 
-      delete req.session.navoriToken;
-      delete req.session.username;
-      return res.status(401).json({ message: "Session expired. Please log in again." });
+      return handleExpiredToken(req, res);
     } catch (error: any) {
       return res.status(502).json({ message: error?.message || "Unable to reach Navori API" });
     }
@@ -304,9 +375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = await navoriGetMediasById(req.session.navoriToken, ids);
       if (!result.success && result.error === "NOT_AUTHORIZED") {
-        delete req.session.navoriToken;
-        delete req.session.username;
-        return res.status(401).json({ message: "Session expired. Please log in again." });
+        return handleExpiredToken(req, res);
       }
       return handleNavoriResult(req, res, result, "medias", result.medias);
     } catch {
@@ -328,9 +397,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriSetMedias(req.session.navoriToken, medias);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to save medias" });
       }
@@ -375,9 +442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = await navoriGetTemplatesById(req.session.navoriToken, ids);
       if (!result.success && result.error === "NOT_AUTHORIZED") {
-        delete req.session.navoriToken;
-        delete req.session.username;
-        return res.status(401).json({ message: "Session expired. Please log in again." });
+        return handleExpiredToken(req, res);
       }
       return handleNavoriResult(req, res, result, "templates", result.templates);
     } catch {
@@ -399,9 +464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriSetTemplates(req.session.navoriToken, templates);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to save templates" });
       }
@@ -423,9 +486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriDeleteMedias(req.session.navoriToken, medias);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to delete medias" });
       }
@@ -450,9 +511,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriCopyMedias(req.session.navoriToken, idList, groupId, folderId || 0);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to copy medias" });
       }
@@ -474,9 +533,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriDeleteTemplates(req.session.navoriToken, templates);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to delete templates" });
       }
@@ -501,9 +558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriCopyTemplates(req.session.navoriToken, idList, groupId, folderId || 0);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to copy templates" });
       }
@@ -572,9 +627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = await navoriGetPlaylistsById(req.session.navoriToken, ids);
       if (!result.success && result.error === "NOT_AUTHORIZED") {
-        delete req.session.navoriToken;
-        delete req.session.username;
-        return res.status(401).json({ message: "Session expired. Please log in again." });
+        return handleExpiredToken(req, res);
       }
       return handleNavoriResult(req, res, result, "playlists", result.playlists);
     } catch {
@@ -596,9 +649,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriSetPlaylists(req.session.navoriToken, playlists);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to save playlists" });
       }
@@ -631,17 +682,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
+      console.log("[PLAYLIST CONTENTS SET]", JSON.stringify(req.body));
       const result = await navoriSetPlaylistContents(req.session.navoriToken, contents);
+      console.log("[PLAYLIST CONTENTS RESULT]", JSON.stringify(result));
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to save playlist contents" });
       }
       return res.json({ success: true });
-    } catch {
+    } catch (err) {
+      console.error("[PLAYLIST CONTENTS SET ERROR]", err);
       return res.status(502).json({ message: "Unable to reach Navori API" });
     }
   });
@@ -702,17 +754,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
+      console.log("[TIMESLOTS SET]", JSON.stringify(req.body));
       const result = await navoriSetTimeSlots(req.session.navoriToken, timeslots);
+      console.log("[TIMESLOTS RESULT]", JSON.stringify(result));
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to save time slots" });
       }
       return res.json({ success: true, timeslots: result.timeslots || [] });
-    } catch {
+    } catch (err) {
+      console.error("[TIMESLOTS SET ERROR]", err);
       return res.status(502).json({ message: "Unable to reach Navori API" });
     }
   });
@@ -737,9 +790,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriDeleteTimeSlots(req.session.navoriToken, timeSlotIds);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to delete time slots" });
       }
@@ -766,9 +817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriPublishContent(req.session.navoriToken, groupId, playerIds);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to publish content" });
       }
@@ -798,9 +847,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriTriggerContent(req.session.navoriToken, playerId, contentId, contentType);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to trigger content" });
       }
@@ -837,9 +884,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await navoriRemoteSettings(req.session.navoriToken, playerIds, action, groupId);
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
-          delete req.session.navoriToken;
-          delete req.session.username;
-          return res.status(401).json({ message: "Session expired. Please log in again." });
+          return handleExpiredToken(req, res);
         }
         return res.status(502).json({ message: result.error || "Unable to apply remote settings" });
       }
@@ -870,9 +915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (result.Status === "NOT_AUTHORIZED") {
-        delete req.session.navoriToken;
-        delete req.session.username;
-        return res.status(401).json({ message: "Session expired" });
+        return handleExpiredToken(req, res);
       }
 
       return res.json(result);
@@ -900,9 +943,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (result.Status === "NOT_AUTHORIZED") {
-        delete req.session.navoriToken;
-        delete req.session.username;
-        return res.status(401).json({ message: "Session expired" });
+        return handleExpiredToken(req, res);
       }
 
       return res.json(result);
