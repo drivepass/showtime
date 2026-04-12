@@ -4,8 +4,20 @@ import { registerRoutes } from "./routes";
 
 const app = express();
 
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map(s => s.trim())
+  : ["http://localhost:5175"];
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(",").map(s => s.trim()) || "http://localhost:5175",
+  origin: (origin, callback) => {
+    // Allow requests with no origin (server-to-server, health checks)
+    // or requests from an allowed origin
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, origin || true);
+    } else {
+      callback(null, false);
+    }
+  },
   credentials: true,
 }));
 app.use(express.json());

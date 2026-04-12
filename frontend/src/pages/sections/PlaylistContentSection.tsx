@@ -2,7 +2,7 @@ import { ListMusicIcon, Loader2Icon, SettingsIcon, PlusIcon } from "lucide-react
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useGroupSelection } from "@/hooks/use-group-selection";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { useTheme } from "@/hooks/use-theme";
 import { AddPlaylistModal } from "./AddPlaylistModal";
@@ -161,8 +161,10 @@ function PlaylistContentRow({ content, detail, index }: { content: PlaylistConte
 }
 
 function PlaylistItem({ playlist }: { playlist: Playlist }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const { t } = useTheme();
+  const queryClient = useQueryClient();
 
   const { data: contentsData, isLoading } = useQuery({
     queryKey: ["/api/playlists", playlist.Id, "contents"],
@@ -225,12 +227,73 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
     return sum + (detail?.Duration || 0);
   }, 0);
 
+  const handleDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/x-showtime-media")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setDragOver(true);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const raw = e.dataTransfer.getData("application/x-showtime-media");
+    if (!raw) return;
+    try {
+      const media = JSON.parse(raw);
+      const res = await fetch(`${API_BASE}/api/playlists/contents/set`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          contents: [{
+            PlaylistId: playlist.Id,
+            ContentId: media.Id,
+            Type: media.itemType === "template" ? "Template" : "Media",
+            Index: contents.length,
+          }],
+        }),
+      });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ["/api/playlists", playlist.Id, "contents"] });
+        if (!expanded) setExpanded(true);
+      }
+    } catch {
+      // drop failed silently
+    }
+  };
+
   return (
-    <div>
-      <div className="px-3 pt-3 pb-1">
-        <span className={`text-sm font-bold ${t.textPrimary} uppercase`} data-testid={`text-playlist-name-${playlist.Id}`}>
-          {playlist.Name}
-        </span>
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={dragOver ? "ring-2 ring-[#2997cc] ring-inset" : ""}
+    >
+      <div
+        className={`px-3 pt-3 pb-1 cursor-pointer ${t.hoverBg} transition-colors`}
+        onClick={() => setExpanded(!expanded)}
+        draggable={true}
+        onDragStart={(e) => {
+          e.dataTransfer.setData("application/x-showtime-playlist", JSON.stringify({
+            Id: playlist.Id,
+            Name: playlist.Name,
+          }));
+          e.dataTransfer.effectAllowed = "copy";
+        }}
+        data-testid={`button-playlist-toggle-${playlist.Id}`}
+      >
+        <div className="flex items-center justify-between">
+          <span className={`text-sm font-bold ${expanded ? "text-[#2997cc]" : t.textPrimary} uppercase`} data-testid={`text-playlist-name-${playlist.Id}`}>
+            {playlist.Name}
+          </span>
+          <svg className={`w-3 h-3 ${t.textDim} transition-transform ${expanded ? "rotate-180" : ""}`} viewBox="0 0 12 12" fill="currentColor"><path d="M2 4l4 4 4-4z" /></svg>
+        </div>
       </div>
 
       <div className="flex items-center gap-1.5 px-3 pb-2">
@@ -240,13 +303,13 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
         <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-[#2997cc] text-white text-[10px] font-bold">{contents.length}</span>
       </div>
 
-      {isLoading && (
+      {expanded && isLoading && (
         <div className="flex items-center justify-center py-3">
           <Loader2Icon className={`w-3 h-3 ${t.textFaint} animate-spin`} />
         </div>
       )}
 
-      {contents.map((content, index) => (
+      {expanded && contents.map((content, index) => (
         <PlaylistContentRow
           key={content.Id || index}
           content={content}

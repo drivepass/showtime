@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import pg from "pg";
 import crypto from "crypto";
 import { navoriLogin, navoriGetGroups, navoriGetPlayers, navoriGetPlayersById, navoriGetFolders, navoriGetMedias, navoriGetMediasById, navoriGetTemplates, navoriGetTemplatesById, navoriGetPlaylists, navoriGetPlaylistsById, navoriSetPlaylists, navoriSetPlaylistContents, navoriGetPlaylistContents, navoriGetContentWindow, navoriGetTimeSlots, navoriSetTimeSlots, navoriDeleteTimeSlots } from "./navori";
 import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport, navoriUploadFile } from "./navori";
@@ -26,16 +27,21 @@ declare module "express-session" {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+  const isProduction = process.env.NODE_ENV === "production";
 
   const PgStore = connectPgSimple(session);
+  const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
   app.set("trust proxy", 1);
 
   app.use(
     session({
       store: new PgStore({
-        conString: process.env.DATABASE_URL,
+        pool: pgPool,
         createTableIfMissing: true,
+        tableName: "session",
+        ttl: 86400,
+        pruneSessionInterval: 60,
       }),
       secret: sessionSecret,
       name: "navori.sid",
@@ -43,9 +49,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       saveUninitialized: false,
       rolling: true,
       cookie: {
-        secure: app.get("env") === "production",
+        secure: isProduction,
         httpOnly: true,
-        sameSite: app.get("env") === "production" ? "none" as const : "lax",
+        sameSite: isProduction ? "none" as const : "lax",
         maxAge: 24 * 60 * 60 * 1000,
       },
     })
@@ -910,12 +916,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "Not authenticated" });
     }
 
-    const thumbnailPath = (req.params as Record<string, string>)[0];
-    if (!thumbnailPath) {
+    const rawPath = (req.params as Record<string, string>)[0];
+    if (!rawPath) {
       return res.status(400).json({ message: "Thumbnail path required" });
     }
 
     try {
+      const thumbnailPath = decodeURIComponent(rawPath);
       const navoriUrl = new URL("https://saas.navori.com/NavoriService/MediaUpload.aspx");
       navoriUrl.searchParams.set("key", thumbnailPath);
       const response = await fetch(navoriUrl.toString(), {

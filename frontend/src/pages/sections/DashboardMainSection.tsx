@@ -60,6 +60,7 @@ export const DashboardMainSection = (): JSX.Element => {
   const [showPreview, setShowPreview] = useState(false);
   const [clearConfirm, setClearConfirm] = useState<"day" | "week" | null>(null);
   const [clearDayIndex, setClearDayIndex] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ day: number; hour: number } | null>(null);
   const { t, isDark } = useTheme();
   const { selectedGroupId } = useGroupSelection();
   const queryClient = useQueryClient();
@@ -396,9 +397,47 @@ export const DashboardMainSection = (): JSX.Element => {
               </div>
 
               <div className="flex flex-1 self-stretch relative">
-                {timeSlots.map((hour) => (
-                  <div key={`${dayData.label}-${hour}`} className={`flex-1 self-stretch border-r ${t.borderSubtle}`} />
-                ))}
+                {timeSlots.map((hour) => {
+                  const hourNum = parseInt(hour);
+                  const isDropTarget = dropTarget?.day === dayData.dayIndex && dropTarget?.hour === hourNum;
+                  return (
+                    <div
+                      key={`${dayData.label}-${hour}`}
+                      className={`flex-1 self-stretch border-r ${t.borderSubtle} ${isDropTarget ? "bg-[#2997cc]/20" : ""}`}
+                      onDragOver={(e) => {
+                        if (e.dataTransfer.types.includes("application/x-showtime-playlist")) {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "copy";
+                          setDropTarget({ day: dayData.dayIndex, hour: hourNum });
+                        }
+                      }}
+                      onDragLeave={() => setDropTarget(null)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDropTarget(null);
+                        const raw = e.dataTransfer.getData("application/x-showtime-playlist");
+                        if (!raw || !selectedGroupId) return;
+                        try {
+                          const playlist = JSON.parse(raw);
+                          const startTime = `${String(hourNum).padStart(2, "0")}:00:00`;
+                          const endHour = Math.min(hourNum + 1, 18);
+                          const endTime = `${String(endHour).padStart(2, "0")}:00:00`;
+                          saveTimeSlotsMutation.mutate([{
+                            Id: 0,
+                            GroupId: selectedGroupId,
+                            PlaylistId: playlist.Id,
+                            DayOfWeek: dayData.dayIndex,
+                            StartTime: startTime,
+                            EndTime: endTime,
+                            Color: "#2997cc",
+                          }]);
+                        } catch {
+                          // drop failed silently
+                        }
+                      }}
+                    />
+                  );
+                })}
 
                 {isLoading ? (
                   <div className={`absolute inset-0 flex items-center justify-center ${isDark ? "text-gray-400" : "text-gray-300"}`}>

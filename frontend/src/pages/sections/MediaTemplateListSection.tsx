@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useGroupSelection } from "@/hooks/use-group-selection";
 import { useQuery } from "@tanstack/react-query";
-import { EyeOffIcon, SearchIcon, Loader2Icon } from "lucide-react";
+import { SearchIcon, Loader2Icon } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useMediaSelection } from "@/hooks/use-media-selection";
 import { useTheme } from "@/hooks/use-theme";
@@ -182,10 +182,22 @@ function MediaThumbnailCard({ item }: { item: ContentItem }) {
           : "Media";
   const [imgError, setImgError] = useState(false);
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData("application/x-showtime-media", JSON.stringify({
+      Id: item.Id,
+      Name: item.Name,
+      itemType: item.itemType,
+      Duration: item.Duration,
+    }));
+    e.dataTransfer.effectAllowed = "copy";
+  };
+
   return (
     <div
       className={`cursor-pointer rounded overflow-hidden ${isSelected ? "ring-1 ring-[#2997cc]" : ""}`}
       onClick={() => selectMedia(isSelected ? null : item.Id, isSelected ? null : item.itemType, isSelected ? null : item)}
+      draggable={true}
+      onDragStart={handleDragStart}
       data-testid={`card-media-${item.itemType}-${item.Id}`}
     >
       <div className={`relative w-full aspect-[16/10] ${t.cardBg} overflow-hidden flex items-center justify-center rounded`}>
@@ -212,9 +224,6 @@ function MediaThumbnailCard({ item }: { item: ContentItem }) {
             </div>
           </div>
         )}
-        <button className="absolute top-1.5 right-1.5 p-1 bg-black/30 rounded hover:bg-black/50 transition-colors" data-testid={`button-preview-${item.Id}`}>
-          <EyeOffIcon className="w-3.5 h-3.5 text-white/70" />
-        </button>
       </div>
       <div className="py-1.5 px-0.5">
         <p className={`text-[12px] ${t.textPrimary} font-semibold leading-tight break-words`} data-testid={`text-media-name-${item.Id}`}>{item.Name}</p>
