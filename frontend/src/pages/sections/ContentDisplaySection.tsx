@@ -24,7 +24,7 @@ function getThumbnailUrl(item: ContentItem): string | undefined {
   const path = item.ThumbnailPath || item.ThumbnailUrl;
   if (!path) return undefined;
   if (path.startsWith("http")) return path;
-  return `/api/thumbnail/${path}`;
+  return `${API_BASE}/api/thumbnail/${encodeURIComponent(path)}`;
 }
 
 const VIDEO_EXTENSIONS = /\.(mp4|mov|avi|mkv|webm|m4v|wmv|flv|mpg|mpeg|ts)$/i;

@@ -916,8 +916,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const navoriUrl = `https://saas.navori.com/NavoriService/MediaUpload.aspx?key=${encodeURIComponent(thumbnailPath)}`;
-      const response = await fetch(navoriUrl, {
+      const navoriUrl = new URL("https://saas.navori.com/NavoriService/MediaUpload.aspx");
+      navoriUrl.searchParams.set("key", thumbnailPath);
+      const response = await fetch(navoriUrl.toString(), {
         headers: { "Token": req.session.navoriToken! },
       });
 
@@ -926,7 +927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("image") || contentType.includes("octet")) {
+      if (contentType.includes("image") || contentType.includes("octet") || contentType.includes("jpeg") || contentType.includes("png")) {
         res.set("Content-Type", contentType);
         res.set("Cache-Control", "public, max-age=3600");
         const buffer = Buffer.from(await response.arrayBuffer());

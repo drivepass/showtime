@@ -228,9 +228,10 @@ export function UploadFileModal({ isOpen, onClose }: { isOpen: boolean; onClose:
     setResults(newResults);
     setUploading(false);
     if (newResults.some(r => r.success)) {
-      await queryClient.invalidateQueries({ queryKey: ["/api/medias"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/content-default", selectedGroupId] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/content-window"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/medias"], refetchType: "all" });
+      await queryClient.invalidateQueries({ queryKey: ["/api/content-default"], refetchType: "all" });
+      await queryClient.invalidateQueries({ queryKey: ["/api/content-window"], refetchType: "all" });
+      await queryClient.invalidateQueries({ queryKey: ["/api/folders"], refetchType: "all" });
     }
   };
 

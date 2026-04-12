@@ -160,7 +160,7 @@ function getThumbnailUrl(item: ContentItem): string | undefined {
   const path = item.ThumbnailPath || item.ThumbnailUrl;
   if (!path) return undefined;
   if (path.startsWith("http")) return path;
-  return `/api/thumbnail/${path}`;
+  return `${API_BASE}/api/thumbnail/${encodeURIComponent(path)}`;
 }
 
 function MediaThumbnailCard({ item }: { item: ContentItem }) {

@@ -126,7 +126,7 @@ function PlaylistContentRow({ content, detail, index }: { content: PlaylistConte
   const [imgError, setImgError] = useState(false);
 
   const thumbPath = detail?.ThumbnailPath;
-  const thumbUrl = thumbPath ? (thumbPath.startsWith("http") ? thumbPath : `/api/thumbnail/${thumbPath}`) : undefined;
+  const thumbUrl = thumbPath ? (thumbPath.startsWith("http") ? thumbPath : `${API_BASE}/api/thumbnail/${encodeURIComponent(thumbPath)}`) : undefined;
   const displayName = detail?.Name || `Content ${index + 1}`;
 
   return (

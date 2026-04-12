@@ -31,7 +31,7 @@ function getThumbnail(item: DetailItem): string | undefined {
   const path = item.BigThumbnailPath || item.BigThumbnailUrl || item.ThumbnailPath || item.ThumbnailUrl;
   if (!path) return undefined;
   if (path.startsWith("http")) return path;
-  return `/api/thumbnail/${path}`;
+  return `${API_BASE}/api/thumbnail/${encodeURIComponent(path)}`;
 }
 
 function getFileSize(item: DetailItem): number | undefined {

@@ -122,7 +122,7 @@ export function AddPlaylistModal({ isOpen, onClose }: AddPlaylistModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose} data-testid="add-playlist-modal-backdrop">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60" onClick={onClose} data-testid="add-playlist-modal-backdrop">
       <div
         className={`${isDark ? "bg-[#0d0d0d]" : "bg-white"} rounded-sm shadow-2xl w-[1200px] max-h-[90vh] flex flex-col overflow-hidden`}
         onClick={(e) => e.stopPropagation()}
@@ -208,6 +208,7 @@ export function AddPlaylistModal({ isOpen, onClose }: AddPlaylistModalProps) {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Enter playlist name"
+                        autoFocus
                         className={`w-full bg-transparent text-sm font-medium ${isDark ? "text-[#c8d2e0] placeholder:text-[#546e7a]" : "text-gray-700 placeholder:text-gray-400"} outline-none`}
                         data-testid="input-playlist-name"
                       />
