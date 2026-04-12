@@ -17,11 +17,30 @@ interface Player {
   GroupName?: string;
   IpAddress?: string;
   LastConnection?: string;
+  LastNotify?: string;
   OsVersion?: string;
   PlayerVersion?: string;
   Resolution?: string;
   Status?: string;
 }
+
+type PlayerStatus = "online" | "warning" | "offline" | "unknown";
+
+function getPlayerStatus(player: Player): PlayerStatus {
+  if (!player.LastNotify) return "unknown";
+  if (player.LastNotify.startsWith("0001-01-01")) return "offline";
+  const ago = Date.now() - new Date(player.LastNotify).getTime();
+  if (ago <= 10 * 60 * 1000) return "online";
+  if (ago <= 24 * 60 * 60 * 1000) return "warning";
+  return "offline";
+}
+
+const STATUS_CONFIG: Record<PlayerStatus, { dot: string; label: string; badgeLight: string; badgeDark: string }> = {
+  online:  { dot: "bg-green-400",  label: "Online",  badgeLight: "bg-green-50 text-green-600",   badgeDark: "bg-green-500/10 text-green-400" },
+  warning: { dot: "bg-yellow-400", label: "Warning", badgeLight: "bg-yellow-50 text-yellow-600", badgeDark: "bg-yellow-500/10 text-yellow-400" },
+  offline: { dot: "bg-red-400",    label: "Offline", badgeLight: "bg-red-50 text-red-600",       badgeDark: "bg-red-500/10 text-red-400" },
+  unknown: { dot: "bg-gray-400",   label: "Unknown", badgeLight: "bg-gray-100 text-gray-500",    badgeDark: "bg-gray-500/10 text-gray-400" },
+};
 
 interface PlayerGroup {
   Id: number;
@@ -104,16 +123,18 @@ function MonitoringContent() {
 
   const totalGroups = groups.length;
   const totalPlayers = players.length;
-  const activeCount = players.filter((p) => p.Active).length;
-  const offlineCount = players.filter((p) => !p.Active).length;
+  const onlineCount = players.filter((p) => getPlayerStatus(p) === "online").length;
+  const warningCount = players.filter((p) => getPlayerStatus(p) === "warning").length;
+  const offlineCount = players.filter((p) => getPlayerStatus(p) === "offline").length;
+  const unknownCount = players.filter((p) => getPlayerStatus(p) === "unknown").length;
 
   const counters = [
     { label: "Group", value: totalGroups },
     { label: "Player", value: totalPlayers },
-    { label: "Active", value: activeCount },
+    { label: "Online", value: onlineCount },
+    { label: "Warning", value: warningCount },
     { label: "Offline", value: offlineCount },
-    { label: "Alert", value: 0 },
-    { label: "Inactive", value: 0 },
+    { label: "Unknown", value: unknownCount },
   ];
 
   const togglePlayerSelection = (playerId: number) => {
@@ -349,6 +370,8 @@ function MonitoringContent() {
                       ? new Date(player.LastConnection).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })
                       : "—";
                     const isSelected = selectedPlayerIds.includes(player.Id);
+                    const status = getPlayerStatus(player);
+                    const cfg = STATUS_CONFIG[status];
 
                     return (
                       <tr
@@ -370,7 +393,7 @@ function MonitoringContent() {
                         </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${player.Active ? "bg-green-400" : "bg-red-400"}`} />
+                            <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
                             <span className={`text-[11px] font-medium ${isDark ? "text-[#c8d2e0]" : "text-gray-700"}`} data-testid={`text-player-name-${player.Id}`}>
                               {player.Name}
                             </span>
@@ -385,11 +408,9 @@ function MonitoringContent() {
                         <td className={`px-4 py-2.5 border-l ${isDark ? "border-[#1e2e3e]" : "border-[#f3f4f6]"}`}>
                           <div className="flex items-center gap-2">
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${
-                              player.Active
-                                ? isDark ? "bg-green-500/10 text-green-400" : "bg-green-50 text-green-600"
-                                : isDark ? "bg-red-500/10 text-red-400" : "bg-red-50 text-red-600"
+                              isDark ? cfg.badgeDark : cfg.badgeLight
                             }`} data-testid={`status-player-${player.Id}`}>
-                              {player.Active ? "Online" : "Offline"}
+                              {cfg.label}
                             </span>
                             {player.Resolution && (
                               <span className={`text-[10px] ${t.textDim}`}>{player.Resolution}</span>

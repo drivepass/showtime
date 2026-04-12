@@ -130,6 +130,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         delete req.session.username;
         return res.status(401).json({ message: "Session expired. Please log in again." });
       }
+      if (!result.success || !result.players?.length) {
+        return handleNavoriResult(req, res, result, "players", result.players);
+      }
+
+      // Enrich with LastNotify from GetPlayersById for real-time online status
+      try {
+        const ids = result.players.map((p: any) => p.Id);
+        const detailResult = await navoriGetPlayersById(req.session.navoriToken, ids);
+        if (detailResult.success && detailResult.players?.length) {
+          const notifyMap = new Map<number, string>();
+          for (const dp of detailResult.players) {
+            if (dp.Id != null && dp.LastNotify != null) {
+              notifyMap.set(dp.Id, dp.LastNotify);
+            }
+          }
+          for (const p of result.players) {
+            const lastNotify = notifyMap.get(p.Id);
+            if (lastNotify !== undefined) {
+              p.LastNotify = lastNotify;
+            }
+          }
+        }
+      } catch {
+        // If enrichment fails, return players without LastNotify — frontend handles missing values
+      }
+
       return handleNavoriResult(req, res, result, "players", result.players);
     } catch {
       return res.status(502).json({ message: "Unable to reach Navori API" });
