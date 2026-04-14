@@ -355,6 +355,7 @@ export const MediaTemplateListSection = (): JSX.Element => {
     queryKey: ["/api/content-window", selectedGroupId, selectedFilter?.filterKey || selectedFilter?.folderId, selectedFilter?.folderType],
     queryFn: async () => {
       if (!selectedGroupId || !selectedFilter) return null;
+      console.log("[ContentPanel] loading for group:", selectedGroupId);
       const res = await fetchWithRetry(`${API_BASE}/api/content-window`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -377,6 +378,7 @@ export const MediaTemplateListSection = (): JSX.Element => {
     queryKey: ["/api/content-default", selectedGroupId],
     queryFn: async () => {
       if (!selectedGroupId) return null;
+      console.log("[ContentPanel] loading for group:", selectedGroupId);
       const res = await fetchWithRetry(`${API_BASE}/api/content-window`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -345,6 +345,7 @@ export const PlaylistContentSection = (): JSX.Element => {
     queryKey: ["/api/playlists", selectedGroupId],
     queryFn: async () => {
       if (!selectedGroupId) return { playlists: [] };
+      console.log("[PlaylistsPanel] loading for group:", selectedGroupId);
       const res = await fetchWithRetry(`${API_BASE}/api/playlists?groupId=${selectedGroupId}`, { credentials: "include" });
       if (res.status === 403) return { playlists: [] };
       if (!res.ok) throw new Error("Failed to fetch playlists");
