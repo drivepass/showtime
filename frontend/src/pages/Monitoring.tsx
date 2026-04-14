@@ -380,7 +380,7 @@ function MonitoringContent() {
             )}
           </div>
 
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto overflow-hidden">
             <table className="w-full text-[11px] table-fixed" style={{ minWidth: "1400px" }}>
               <thead className={`sticky top-0 z-10 ${isDark ? "bg-[#0e1620]" : "bg-white"}`}>
                 <tr className={`border-b ${t.border}`}>
@@ -450,15 +450,31 @@ function MonitoringContent() {
                         {/* DISPLAY */}
                         <td className={tdCls}>{"\u2014"}</td>
                         {/* PLAYER (serial/hardware) */}
-                        <td className={tdCls}>{player.SerialNumber || "\u2014"}</td>
+                        <td className={tdCls}>
+                          <span className="truncate max-w-[120px] block" title={player.SerialNumber || "\u2014"}>
+                            {player.SerialNumber ? player.SerialNumber.slice(0, 20) : "\u2014"}
+                          </span>
+                        </td>
                         {/* PLAYLIST */}
                         <td className={tdCls}>{"\u2014"}</td>
                         {/* MODEL */}
-                        <td className={tdCls}>{player.Model || "\u2014"}</td>
+                        <td className={tdCls}>
+                          <span className="truncate max-w-[120px] block" title={player.Model || "\u2014"}>
+                            {player.Model ? player.Model.slice(0, 20) : "\u2014"}
+                          </span>
+                        </td>
                         {/* OS */}
-                        <td className={tdCls}>{player.OsVersion || "\u2014"}</td>
+                        <td className={tdCls}>
+                          <span className="truncate max-w-[120px] block" title={player.OsVersion || "\u2014"}>
+                            {player.OsVersion ? player.OsVersion.slice(0, 15) : "\u2014"}
+                          </span>
+                        </td>
                         {/* VERSION */}
-                        <td className={tdCls}>{player.PlayerVersion || "\u2014"}</td>
+                        <td className={tdCls}>
+                          <span className="truncate max-w-[120px] block" title={player.PlayerVersion || "\u2014"}>
+                            {player.PlayerVersion ? player.PlayerVersion.slice(0, 10) : "\u2014"}
+                          </span>
+                        </td>
                         {/* PROFILE */}
                         <td className={tdCls}>{player.TechnicalProfileId ? `Profile ${player.TechnicalProfileId}` : "Default"}</td>
                         {/* FREE SPACE */}

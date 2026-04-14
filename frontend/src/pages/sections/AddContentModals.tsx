@@ -236,6 +236,8 @@ export function UploadFileModal({ isOpen, onClose }: { isOpen: boolean; onClose:
     setResults(newResults);
     setUploading(false);
     if (newResults.some(r => r.success)) {
+      // Give Navori a moment to process the upload before refetching
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       await queryClient.invalidateQueries({ queryKey: ["/api/medias"], refetchType: "all" });
       await queryClient.invalidateQueries({ queryKey: ["/api/content-default"], refetchType: "all" });
       await queryClient.invalidateQueries({ queryKey: ["/api/content-window"], refetchType: "all" });

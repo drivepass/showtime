@@ -573,6 +573,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "Not authenticated" });
     }
     const contentType = req.headers["content-type"] || "";
+    console.log('[UPLOAD REQUEST]', 'contentType:', contentType);
     if (!contentType.includes("multipart/form-data")) {
       return res.status(400).json({ message: "Multipart form data required" });
     }
@@ -580,8 +581,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
     req.on("end", async () => {
       const body = Buffer.concat(chunks);
+      console.log('[UPLOAD REQUEST]', 'bodySize:', body.length);
       try {
         const result = await navoriUploadFile(req.session.navoriToken!, body, contentType);
+        console.log('[UPLOAD RESULT]', JSON.stringify(result).slice(0, 500));
         if (!result.success) {
           return res.status(502).json({ message: result.error || "Upload failed" });
         }
@@ -701,8 +704,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const existingContents: any[] = existing.contents || [];
         console.log("[PLAYLIST CONTENTS SET] existing for playlist", playlistId, ":", existingContents.length, "items");
 
-        // 2. Append new items with correct Index values
-        const merged = [...existingContents];
+        // 2. Normalize existing items to minimal shape (preserve real Ids) and append new items
+        const merged: any[] = existingContents.map((item: any, idx: number) => ({
+          Id: item.Id,
+          ContentId: item.ContentId,
+          Index: Number.isFinite(item.Index) ? item.Index : idx,
+          PlaylistId: playlistId,
+          Type: item.Type,
+        }));
         for (const newItem of newItems) {
           merged.push({
             Id: 0,
@@ -714,7 +723,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // 3. SET the complete array back to Navori
-        console.log("[PLAYLIST CONTENTS SET] sending merged:", JSON.stringify(merged));
+        console.log("[PLAYLIST CONTENTS SET] sending merged array:", JSON.stringify(merged));
         const result = await navoriSetPlaylistContents(req.session.navoriToken!, merged);
         console.log("[PLAYLIST CONTENTS RESULT]", JSON.stringify(result));
         if (!result.success) {
@@ -788,8 +797,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      console.log("[TIMESLOTS SET]", JSON.stringify(req.body));
-      const result = await navoriSetTimeSlots(req.session.navoriToken, timeslots);
+      console.log("[TIMESLOTS SET] incoming:", JSON.stringify(req.body));
+
+      // Fetch existing timeslots for this group so we don't wipe them
+      const firstSlot = timeslots[0] || {};
+      const groupId = firstSlot.GroupId;
+      const fromDates = timeslots.map((s: any) => s.FromDate).filter(Boolean).sort();
+      const toDates = timeslots.map((s: any) => s.ToDate).filter(Boolean).sort();
+      const fromDate = fromDates[0];
+      const toDate = toDates[toDates.length - 1];
+
+      const existingRes = await navoriGetTimeSlots(req.session.navoriToken!, groupId, fromDate, toDate);
+      if (!existingRes.success && existingRes.error === "NOT_AUTHORIZED") {
+        return handleExpiredToken(req, res);
+      }
+      const existing = existingRes.timeslots || [];
+      console.log("[TIMESLOTS SET] existing for group", groupId, ":", existing.length, "items");
+
+      // Merge: keep existing slots that aren't being updated, plus all incoming
+      const incomingIds = new Set(
+        timeslots.filter((s: any) => Number.isFinite(s?.Id) && s.Id > 0).map((s: any) => s.Id)
+      );
+      const merged = [
+        ...existing.filter((s: any) => !incomingIds.has(s.Id)),
+        ...timeslots,
+      ];
+      console.log("[TIMESLOTS SET] sending merged array:", merged.length, "items");
+
+      const result = await navoriSetTimeSlots(req.session.navoriToken, merged);
       console.log("[TIMESLOTS RESULT]", JSON.stringify(result));
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
