@@ -442,13 +442,14 @@ export const MediaTemplateListSection = (): JSX.Element => {
 
   return (
     <div className={`flex flex-col flex-shrink-0 h-full border-r ${t.border}`}>
-      <header className={`h-10 ${isDark ? "bg-[#0e1620]" : t.panelBg2} border-b ${t.border} flex items-center px-2 gap-1.5 flex-shrink-0`}>
+      <header className={`${isDark ? "bg-[#0e1620]" : t.panelBg2} border-b ${t.border} flex items-center flex-shrink-0`} style={{ height: "36px", padding: "0 12px", gap: "8px" }}>
         <svg className={`w-4 h-4 ${t.textDim} flex-shrink-0`} viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1" /><rect x="9" y="1" width="6" height="6" rx="1" /><rect x="1" y="9" width="6" height="6" rx="1" /><rect x="9" y="9" width="6" height="6" rx="1" /></svg>
         <span className={`text-[11px] ${t.textMuted} font-medium whitespace-nowrap`}>CONTENT</span>
-        <div className="flex items-center gap-1 ml-1">
+        <div className="flex items-center gap-2">
           <div className="relative" ref={addMediaRef}>
             <button
-              className={`px-1.5 py-0.5 text-[10px] ${t.textMuted} border ${t.borderAccent} rounded ${t.hoverBg} transition-colors whitespace-nowrap`}
+              className={`inline-flex items-center px-2 text-[10px] ${t.textMuted} border ${t.borderAccent} rounded ${t.hoverBg} transition-colors whitespace-nowrap m-0`}
+              style={{ height: "24px" }}
               data-testid="button-add-media"
               onClick={() => setAddMediaDropdownOpen(!addMediaDropdownOpen)}
             >
@@ -487,9 +488,9 @@ export const MediaTemplateListSection = (): JSX.Element => {
               </div>
             )}
           </div>
-          <button className={`px-1.5 py-0.5 text-[10px] ${t.textMuted} border ${t.borderAccent} rounded ${t.hoverBg} transition-colors whitespace-nowrap`} onClick={() => setLocation("/template-designer")} data-testid="button-add-template">+ TEMPLATE</button>
+          <button className={`inline-flex items-center px-2 text-[10px] ${t.textMuted} border ${t.borderAccent} rounded ${t.hoverBg} transition-colors whitespace-nowrap m-0`} style={{ height: "24px" }} onClick={() => setLocation("/template-designer")} data-testid="button-add-template">+ TEMPLATE</button>
         </div>
-        <button className="ml-auto px-2.5 py-1 text-[10px] text-white bg-[#2997cc] rounded hover:bg-[#2587b8] transition-colors flex items-center gap-1 whitespace-nowrap" onClick={() => setLocation("/ai-content-studio")} data-testid="button-ai-studio">
+        <button className="ml-auto inline-flex items-center px-2.5 text-[10px] text-white bg-[#2997cc] rounded hover:bg-[#2587b8] transition-colors gap-1 whitespace-nowrap m-0" style={{ height: "24px" }} onClick={() => setLocation("/ai-content-studio")} data-testid="button-ai-studio">
           <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor"><path d="M6 0l1.5 4.5L12 6l-4.5 1.5L6 12 4.5 7.5 0 6l4.5-1.5z" /></svg>
           AI CONTENT STUDIO
         </button>
