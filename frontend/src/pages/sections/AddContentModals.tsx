@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { apiRequest, queryClient, API_BASE } from "../../lib/queryClient";
+import { apiRequest, queryClient, API_BASE, fetchWithRetry } from "../../lib/queryClient";
 import { useTheme } from "@/hooks/use-theme";
 import { useGroupSelection } from "@/hooks/use-group-selection";
 import { Globe, Video, Monitor, UploadCloudIcon, FileIcon, XIcon } from "lucide-react";
@@ -211,7 +211,7 @@ export function UploadFileModal({ isOpen, onClose }: { isOpen: boolean; onClose:
         formData.append("file", file);
         if (selectedGroupId) formData.append("groupId", String(selectedGroupId));
         console.log("[UPLOAD] starting:", file.name, "groupId:", selectedGroupId);
-        const res = await fetch(API_BASE + "/api/medias/upload", {
+        const res = await fetchWithRetry(API_BASE + "/api/medias/upload", {
           method: "POST",
           credentials: "include",
           body: formData,

@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { useMediaSelection } from "@/hooks/use-media-selection";
 import { useTheme } from "@/hooks/use-theme";
 import { useLocation } from "wouter";
-import { API_BASE } from "@/lib/queryClient";
+import { API_BASE, fetchWithRetry } from "@/lib/queryClient";
 import { AddContentModal, UploadFileModal } from "./AddContentModals";
 
 interface Folder {
@@ -339,7 +339,7 @@ export const MediaTemplateListSection = (): JSX.Element => {
     queryKey: ["/api/folders", selectedGroupId],
     queryFn: async () => {
       if (!selectedGroupId) return { folders: [] };
-      const res = await fetch(`${API_BASE}/api/folders?groupId=${selectedGroupId}`, { credentials: "include" });
+      const res = await fetchWithRetry(`${API_BASE}/api/folders?groupId=${selectedGroupId}`, { credentials: "include" });
       if (res.status === 403) return { folders: [] };
       if (!res.ok) throw new Error("Failed to fetch folders");
       return res.json();
@@ -354,7 +354,7 @@ export const MediaTemplateListSection = (): JSX.Element => {
     queryKey: ["/api/content-window", selectedGroupId, selectedFilter?.filterKey || selectedFilter?.folderId, selectedFilter?.folderType],
     queryFn: async () => {
       if (!selectedGroupId || !selectedFilter) return null;
-      const res = await fetch(`${API_BASE}/api/content-window`, {
+      const res = await fetchWithRetry(`${API_BASE}/api/content-window`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -376,7 +376,7 @@ export const MediaTemplateListSection = (): JSX.Element => {
     queryKey: ["/api/content-default", selectedGroupId],
     queryFn: async () => {
       if (!selectedGroupId) return null;
-      const res = await fetch(`${API_BASE}/api/content-window`, {
+      const res = await fetchWithRetry(`${API_BASE}/api/content-window`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

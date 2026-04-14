@@ -169,7 +169,7 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
   const { data: contentsData, isLoading } = useQuery({
     queryKey: ["/api/playlists", playlist.Id, "contents"],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/playlists/${playlist.Id}/contents`, { credentials: "include" });
+      const res = await fetchWithRetry(`${API_BASE}/api/playlists/${playlist.Id}/contents`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch playlist contents");
       return res.json();
     },
@@ -184,7 +184,7 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
   const { data: templateDetails } = useQuery({
     queryKey: ["/api/templates/details", templateIds],
     queryFn: async () => {
-      const res = await fetch(API_BASE + "/api/templates/details", {
+      const res = await fetchWithRetry(API_BASE + "/api/templates/details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -199,7 +199,7 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
   const { data: mediaDetails } = useQuery({
     queryKey: ["/api/medias/details", mediaIds],
     queryFn: async () => {
-      const res = await fetch(API_BASE + "/api/medias/details", {
+      const res = await fetchWithRetry(API_BASE + "/api/medias/details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -340,7 +340,7 @@ export const PlaylistContentSection = (): JSX.Element => {
     queryKey: ["/api/playlists", selectedGroupId],
     queryFn: async () => {
       if (!selectedGroupId) return { playlists: [] };
-      const res = await fetch(`${API_BASE}/api/playlists?groupId=${selectedGroupId}`, { credentials: "include" });
+      const res = await fetchWithRetry(`${API_BASE}/api/playlists?groupId=${selectedGroupId}`, { credentials: "include" });
       if (res.status === 403) return { playlists: [] };
       if (!res.ok) throw new Error("Failed to fetch playlists");
       return res.json();
@@ -355,7 +355,7 @@ export const PlaylistContentSection = (): JSX.Element => {
   const { data: playlistDetailsData } = useQuery({
     queryKey: ["/api/playlists/details", playlistIds],
     queryFn: async () => {
-      const res = await fetch(API_BASE + "/api/playlists/details", {
+      const res = await fetchWithRetry(API_BASE + "/api/playlists/details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

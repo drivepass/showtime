@@ -29,26 +29,28 @@ async function tryRefreshToken(): Promise<boolean> {
  */
 export async function fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
   const opts = { ...options, credentials: options.credentials || ("include" as RequestCredentials) };
-  let res = await fetch(url, opts);
+  let response = await fetch(url, opts);
 
-  // 409 = server already refreshed the Navori token, just retry after a brief delay
-  if (res.status === 409) {
-    console.log("[fetchWithRetry] 409 received, retrying in 800ms:", url);
-    await new Promise(r => setTimeout(r, 800));
-    res = await fetch(url, opts);
+  if (response.status === 409) {
+    const data = await response.clone().json().catch(() => ({}));
+    if (data.retryable) {
+      console.log('[fetchWithRetry] 409 received, waiting 1000ms then retrying...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      response = await fetch(url, opts);
+    }
   }
 
   // 401 = token expired, try client-side refresh then retry
-  if (res.status === 401) {
+  if (response.status === 401) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
-      res = await fetch(url, opts);
+      response = await fetch(url, opts);
     } else {
       window.dispatchEvent(new CustomEvent("auth:expired"));
     }
   }
 
-  return res;
+  return response;
 }
 
 async function throwIfResNotOk(res: Response) {

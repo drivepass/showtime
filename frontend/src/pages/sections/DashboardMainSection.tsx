@@ -87,7 +87,7 @@ export const DashboardMainSection = (): JSX.Element => {
     queryFn: async () => {
       setTimeslotError(null);
       if (!selectedGroupId) return { timeslots: [] };
-      const res = await fetch(API_BASE + "/api/timeslots", {
+      const res = await fetchWithRetry(API_BASE + "/api/timeslots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ groupId: selectedGroupId, fromDate, toDate }),
