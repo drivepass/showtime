@@ -188,6 +188,7 @@ function MediaThumbnailCard({ item }: { item: ContentItem }) {
       Name: item.Name,
       Type: item.itemType,
       Duration: item.Duration,
+      GroupId: (item as any).GroupId,
     }));
     e.dataTransfer.effectAllowed = "copy";
   };

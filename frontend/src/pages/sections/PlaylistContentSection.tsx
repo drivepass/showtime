@@ -13,6 +13,7 @@ interface Playlist {
   Name: string;
   Duration?: number;
   ContentCount?: number;
+  GroupId?: number;
 }
 
 interface PlaylistContent {
@@ -246,6 +247,10 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
     if (!raw) return;
     try {
       const media = JSON.parse(raw);
+      if (media.GroupId != null && playlist.GroupId != null && media.GroupId !== playlist.GroupId) {
+        window.alert("Cannot add this media to the playlist - media must be from the same group as the playlist.");
+        return;
+      }
       const payload = {
         contents: [{
           Id: 0,
