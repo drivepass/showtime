@@ -797,7 +797,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      console.log("[TIMESLOTS SET] incoming:", JSON.stringify(req.body));
+      console.log("[TIMESLOTS SET] payload:", JSON.stringify(req.body));
 
       // Fetch existing timeslots for this group so we don't wipe them
       const firstSlot = timeslots[0] || {};
@@ -825,7 +825,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("[TIMESLOTS SET] sending merged array:", merged.length, "items");
 
       const result = await navoriSetTimeSlots(req.session.navoriToken, merged);
-      console.log("[TIMESLOTS RESULT]", JSON.stringify(result));
+      console.log("[TIMESLOTS RESULT]:", JSON.stringify(result));
       if (!result.success) {
         if (result.error === "NOT_AUTHORIZED") {
           return handleExpiredToken(req, res);

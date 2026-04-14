@@ -61,6 +61,7 @@ export const DashboardMainSection = (): JSX.Element => {
   const [clearConfirm, setClearConfirm] = useState<"day" | "week" | null>(null);
   const [clearDayIndex, setClearDayIndex] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<{ day: number; hour: number } | null>(null);
+  const [dropSuccess, setDropSuccess] = useState(false);
   const { t, isDark } = useTheme();
   const { selectedGroupId } = useGroupSelection();
   const queryClient = useQueryClient();
@@ -123,7 +124,10 @@ export const DashboardMainSection = (): JSX.Element => {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/timeslots", selectedGroupId, fromDate, toDate] });
+      queryClient.invalidateQueries({ queryKey: ["/api/timeslots"] });
+      queryClient.refetchQueries({ queryKey: ["/api/timeslots"] });
+      setDropSuccess(true);
+      window.setTimeout(() => setDropSuccess(false), 1500);
     },
     onError: (error: Error) => {
       console.error("Failed to save timeslot:", error);
@@ -229,7 +233,12 @@ export const DashboardMainSection = (): JSX.Element => {
   };
 
   return (
-    <section className={`flex flex-col flex-1 min-w-0 h-full ${t.panelBg}`}>
+    <section className={`flex flex-col flex-1 min-w-0 h-full ${t.panelBg} relative`}>
+      {dropSuccess && (
+        <div className="fixed top-4 right-4 z-[80] bg-green-500 text-white text-xs font-medium px-3 py-2 rounded shadow-lg" data-testid="toast-drop-success">
+          Added to schedule
+        </div>
+      )}
       {timeslotError && (
         <div className="bg-red-100 text-red-700 px-4 py-2 text-xs font-medium border-b border-red-300">
           {timeslotError}
@@ -423,6 +432,7 @@ export const DashboardMainSection = (): JSX.Element => {
                         if (!raw || !selectedGroupId) return;
                         try {
                           const playlist = JSON.parse(raw);
+                          console.log("[TIMESLOT DROP] playlist:", playlist);
                           const startTime = `${String(hourNum).padStart(2, "0")}:00:00`;
                           const endHour = Math.min(hourNum + 1, 18);
                           const endTime = `${String(endHour).padStart(2, "0")}:00:00`;
@@ -438,7 +448,7 @@ export const DashboardMainSection = (): JSX.Element => {
                             ToDate: dateStr,
                             Color: "#2997cc",
                           }];
-                          console.log("[TIMESLOT DROP] payload:", JSON.stringify(payload));
+                          console.log("[TIMESLOT DROP] payload being sent:", payload);
                           saveTimeSlotsMutation.mutate(payload);
                         } catch (err: any) {
                           console.error("Failed to process drop:", err);
