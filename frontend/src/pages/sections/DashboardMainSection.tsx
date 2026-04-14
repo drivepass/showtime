@@ -87,7 +87,11 @@ export const DashboardMainSection = (): JSX.Element => {
     queryKey: ["/api/timeslots", selectedGroupId, fromDate, toDate],
     queryFn: async () => {
       setTimeslotError(null);
-      if (!selectedGroupId) return { timeslots: [] };
+      if (!selectedGroupId) {
+        console.log("[TIMESLOTS] no group selected, skipping fetch");
+        return { timeslots: [] };
+      }
+      console.log("[TIMESLOTS] fetching for group:", selectedGroupId, "from:", fromDate, "to:", toDate);
       const res = await fetchWithRetry(API_BASE + "/api/timeslots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -103,7 +107,9 @@ export const DashboardMainSection = (): JSX.Element => {
         setTimeslotError(errorMsg);
         throw new Error(errorMsg);
       }
-      return res.json();
+      const data = await res.json();
+      console.log("[TIMESLOTS] result:", data?.timeslots);
+      return data;
     },
     enabled: !!selectedGroupId,
   });

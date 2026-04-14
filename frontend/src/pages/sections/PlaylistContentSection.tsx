@@ -312,10 +312,10 @@ function PlaylistItem({ playlist }: { playlist: Playlist }) {
       </div>
 
       <div className="flex items-center gap-1.5 px-3 pb-2">
-        <span className={`text-[11px] ${t.textDim}`}>{formatDuration(totalDuration)}</span>
+        <span className={`text-[11px] ${t.textDim}`}>{formatDuration(totalDuration > 0 ? totalDuration : playlist.Duration)}</span>
         <span className={`text-[11px] ${t.textFaint}`}>·</span>
         <span className={`text-[11px] ${t.textDim}`}>CONTENT</span>
-        <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-[#2997cc] text-white text-[10px] font-bold">{contents.length}</span>
+        <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-[#2997cc] text-white text-[10px] font-bold">{contents.length > 0 ? contents.length : (playlist.ContentCount ?? 0)}</span>
       </div>
 
       {expanded && isLoading && (
@@ -361,6 +361,7 @@ export const PlaylistContentSection = (): JSX.Element => {
   const { data: playlistDetailsData } = useQuery({
     queryKey: ["/api/playlists/details", playlistIds],
     queryFn: async () => {
+      console.log("[PLAYLIST DETAILS] fetching for ids:", playlistIds);
       const res = await fetchWithRetry(API_BASE + "/api/playlists/details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -368,7 +369,9 @@ export const PlaylistContentSection = (): JSX.Element => {
         body: JSON.stringify({ ids: playlistIds }),
       });
       if (!res.ok) return { playlists: [] };
-      return res.json();
+      const data = await res.json();
+      console.log("[PLAYLIST DETAILS] result:", data);
+      return data;
     },
     enabled: playlistIds.length > 0,
   });
