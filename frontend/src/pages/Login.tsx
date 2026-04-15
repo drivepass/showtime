@@ -9,7 +9,7 @@ export default function Login() {
 
   useEffect(() => {
     if (user) {
-      setLocation("/");
+      setLocation("/launching");
     }
   }, [user, setLocation]);
 
