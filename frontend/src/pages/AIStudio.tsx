@@ -33,6 +33,7 @@ export default function AIStudio() {
   const [results, setResults] = useState<GeneratedImage[] | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [downloadingIdx, setDownloadingIdx] = useState<number | null>(null);
 
   useEffect(() => {
     fetch(API_BASE + "/api/groups", { credentials: "include" })
@@ -274,6 +275,54 @@ export default function AIStudio() {
                               {selected ? "Selected" : "Select"}
                             </button>
                           </div>
+                          <button
+                            disabled={downloadingIdx === idx}
+                            onClick={async () => {
+                              setDownloadingIdx(idx);
+                              try {
+                                const response = await fetch(img.url);
+                                const blob = await response.blob();
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `showtime-ai-option-${idx + 1}.jpg`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                              } catch {
+                                // download failed silently
+                              } finally {
+                                setDownloadingIdx(null);
+                              }
+                            }}
+                            style={{
+                              width: "100%",
+                              marginTop: 8,
+                              background: "#fff",
+                              color: "#1A91E2",
+                              border: "1px solid #1A91E2",
+                              borderRadius: 6,
+                              padding: 8,
+                              fontSize: 13,
+                              fontWeight: 600,
+                              cursor: downloadingIdx === idx ? "not-allowed" : "pointer",
+                              opacity: downloadingIdx === idx ? 0.7 : 1,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 6,
+                            }}
+                          >
+                            {downloadingIdx === idx ? (
+                              <>
+                                <span className="aistudio-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                                <span>Downloading...</span>
+                              </>
+                            ) : (
+                              "⬇ Download Image"
+                            )}
+                          </button>
                         </div>
                       </div>
                     );
@@ -282,6 +331,7 @@ export default function AIStudio() {
 
                 {selectedIdx !== null && (
                   <button
+                    onClick={() => alert('Download the image first, then upload it manually in your Navori media library via Launch Platform.')}
                     style={{
                       width: "100%", marginTop: 20,
                       background: "#1A91E2", color: "#fff",
@@ -289,7 +339,7 @@ export default function AIStudio() {
                       border: "none", borderRadius: 8, cursor: "pointer",
                     }}
                   >
-                    Save & Publish
+                    Save & Publish to Navori
                   </button>
                 )}
               </>
