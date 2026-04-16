@@ -28,6 +28,7 @@ export default function AIStudio() {
   const [orientation, setOrientation] = useState("Landscape");
   const [resolution, setResolution] = useState("1920×1080");
   const [aspectRatio, setAspectRatio] = useState("16:9");
+  const [aiModel, setAiModel] = useState("flux");
 
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<GeneratedImage[] | null>(null);
@@ -53,7 +54,7 @@ export default function AIStudio() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, contentType, useCase, orientation, resolution, aspectRatio }),
+        body: JSON.stringify({ prompt, contentType, useCase, orientation, resolution, aspectRatio, model: aiModel }),
       });
       if (!res.ok) throw new Error(`Generation failed (${res.status})`);
       const data = await res.json();
@@ -192,6 +193,28 @@ export default function AIStudio() {
                 <ConfigRow label="Orientation" options={ORIENTATIONS} value={orientation} onChange={setOrientation} />
                 <ConfigRow label="Resolution" options={RESOLUTIONS} value={resolution} onChange={setResolution} />
                 <ConfigRow label="Aspect Ratio" options={ASPECTS} value={aspectRatio} onChange={setAspectRatio} />
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", minWidth: 120 }}>AI Model</div>
+                  <div className="seg">
+                    <button
+                      className={aiModel === "flux" ? "active" : ""}
+                      onClick={() => setAiModel("flux")}
+                      title="Best for vehicles and lifestyle photography"
+                    >
+                      Photorealistic
+                    </button>
+                    <button
+                      className={aiModel === "ideogram" ? "active" : ""}
+                      onClick={() => setAiModel("ideogram")}
+                      title="Best for price cards and banners with text"
+                    >
+                      Text & Graphics
+                    </button>
+                  </div>
+                  <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                    {aiModel === "flux" ? "FLUX.1 Pro — best for vehicles & lifestyle" : "Ideogram v2 Turbo — best for price cards & banners with text"}
+                  </span>
+                </div>
               </div>
             )}
           </div>

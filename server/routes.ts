@@ -1200,12 +1200,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ── AI Content Studio: simple 4-variation generation ───────────
   app.post("/api/ai/generate", async (req: Request, res: Response) => {
     try {
-      const { prompt, orientation } = req.body || {};
+      const { prompt, orientation, aspectRatio, model } = req.body || {};
       if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
         return res.status(400).json({ error: "Prompt is required" });
-      }
-      if (!process.env.FAL_KEY) {
-        return res.status(500).json({ error: "FAL_KEY not configured" });
       }
 
       const variations = [
@@ -1214,6 +1211,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { suffix: ", lifestyle outdoor setting, golden hour lighting, aspirational, wide shot", label: "Option 3: Lifestyle Drive" },
         { suffix: ", close-up detail shot, premium materials, minimalist composition", label: "Option 4: Interior Luxury" },
       ];
+
+      if (model === "ideogram") {
+        // Ideogram v2 Turbo via fal.ai
+        if (!process.env.FAL_KEY) {
+          return res.status(500).json({ error: "FAL_KEY not configured" });
+        }
+
+        const ideogramAspect = aspectRatio === "9:16" ? "ASPECT_9_16" : aspectRatio === "1:1" ? "ASPECT_1_1" : "ASPECT_16_9";
+
+        const results = await Promise.all(
+          variations.map(async (v) => {
+            const variationPrompt = prompt + v.suffix;
+            const response = await fetch("https://fal.run/fal-ai/ideogram/v2/turbo", {
+              method: "POST",
+              headers: {
+                "Authorization": `Key ${process.env.FAL_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                prompt: variationPrompt,
+                aspect_ratio: ideogramAspect,
+                style: "REALISTIC",
+                num_images: 1,
+              }),
+            });
+            if (!response.ok) {
+              const text = await response.text();
+              throw new Error(`fal.ai ideogram ${response.status}: ${text}`);
+            }
+            const data: any = await response.json();
+            const url = data?.images?.[0]?.url;
+            if (!url) throw new Error("No image returned from Ideogram");
+            return { url, label: v.label };
+          })
+        );
+
+        return res.json({ images: results });
+      }
+
+      // Default: FLUX.1 Pro via fal.ai
+      if (!process.env.FAL_KEY) {
+        return res.status(500).json({ error: "FAL_KEY not configured" });
+      }
 
       const imageSize = orientation === "Portrait" ? "portrait_16_9" : "landscape_16_9";
 
