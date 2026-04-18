@@ -1201,6 +1201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/generate", async (req: Request, res: Response) => {
     try {
       const { prompt, orientation, aspectRatio, model } = req.body || {};
+      console.log('[AI GENERATE] model:', model, 'prompt:', prompt.substring(0, 50))
       if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
         return res.status(400).json({ error: "Prompt is required" });
       }
@@ -1218,32 +1219,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(500).json({ error: "FAL_KEY not configured" });
         }
 
-        const ideogramAspect = aspectRatio === "9:16" ? "ASPECT_9_16" : aspectRatio === "1:1" ? "ASPECT_1_1" : "ASPECT_16_9";
-
         const results = await Promise.all(
           variations.map(async (v) => {
             const variationPrompt = prompt + v.suffix;
-            const response = await fetch("https://fal.run/fal-ai/ideogram/v2/turbo", {
-              method: "POST",
+            const response = await fetch('https://fal.run/fal-ai/ideogram/v2/turbo', {
+              method: 'POST',
               headers: {
-                "Authorization": `Key ${process.env.FAL_KEY}`,
-                "Content-Type": "application/json",
+                'Authorization': `Key ${process.env.FAL_KEY}`,
+                'Content-Type': 'application/json'
               },
               body: JSON.stringify({
                 prompt: variationPrompt,
-                aspect_ratio: ideogramAspect,
-                style: "REALISTIC",
+                aspect_ratio: aspectRatio === '9:16' ? 'ASPECT_9_16' : aspectRatio === '1:1' ? 'ASPECT_1_1' : 'ASPECT_16_9',
+                style: 'REALISTIC',
                 num_images: 1,
-              }),
-            });
-            if (!response.ok) {
-              const text = await response.text();
-              throw new Error(`fal.ai ideogram ${response.status}: ${text}`);
-            }
-            const data: any = await response.json();
-            const url = data?.images?.[0]?.url;
-            if (!url) throw new Error("No image returned from Ideogram");
-            return { url, label: v.label };
+                magic_prompt_option: 'AUTO'
+              })
+            })
+            const data = await response.json()
+            console.log('[IDEOGRAM] response:', JSON.stringify(data).substring(0, 200))
+            const url = data?.images?.[0]?.url
+            if (!url) throw new Error('No image returned from Ideogram: ' + JSON.stringify(data))
+            return { url, label: v.label }
           })
         );
 
