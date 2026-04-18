@@ -1242,7 +1242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contentType,
       });
 
-      const result = await navoriUploadFile(req.session.navoriToken!, multipartBody, contentType);
+      const result = await navoriUploadFile(req.session.navoriToken!, multipartBody, contentType, safeName, 0, "");
       console.log("[AISTUDIO/PUBLISH] navoriUploadFile result:", JSON.stringify({
         success: result.success,
         media: result.media,

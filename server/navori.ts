@@ -747,8 +747,23 @@ export async function navoriGetAudienceReport(token: string, params: {
   return data;
 }
 
-export async function navoriUploadFile(token: string, body: Buffer, contentType: string): Promise<{ success: boolean; media?: any; error?: string }> {
-  const response = await fetch(`${NAVORI_API_URL}UploadFile`, {
+export async function navoriUploadFile(
+  token: string,
+  body: Buffer,
+  contentType: string,
+  fileName?: string,
+  offset?: number,
+  filePath?: string,
+): Promise<{ success: boolean; media?: any; error?: string }> {
+  let url = `${NAVORI_API_URL}UploadFile`;
+  if (fileName !== undefined) {
+    url =
+      `${url}?FileName=${encodeURIComponent(fileName)}` +
+      `&Offset=${offset ?? 0}` +
+      `&FilePath=${encodeURIComponent(filePath ?? "")}`;
+  }
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": contentType,
