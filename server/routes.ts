@@ -6,7 +6,7 @@ import pg from "pg";
 import crypto from "crypto";
 import { navoriLogin, navoriGetGroups, navoriGetPlayers, navoriGetPlayersById, navoriGetFolders, navoriGetMedias, navoriGetMediasById, navoriGetTemplates, navoriGetTemplatesById, navoriGetPlaylists, navoriGetPlaylistsById, navoriSetPlaylists, navoriSetPlaylistContents, navoriGetPlaylistContents, navoriGetContentWindow, navoriGetTimeSlots, navoriSetTimeSlots, navoriDeleteTimeSlots } from "./navori";
 import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport, navoriUploadFile } from "./navori";
-import { generateCreative, pollVideoResult, addGeneration, updateGeneration, getHistory, requiresTextRendering } from "./aiStudio";
+import { generateCreative, generateWithFluxPro, generateWithIdeogram, pollVideoResult, addGeneration, updateGeneration, getHistory, requiresTextRendering } from "./aiStudio";
 
 const CIPHER_ALGO = "aes-256-gcm";
 
@@ -1070,8 +1070,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({ message: "prompt is required" });
     }
-    if (!process.env.IDEOGRAM_API_KEY) {
-      return res.status(503).json({ message: "IDEOGRAM_API_KEY is not configured." });
+    if (!process.env.FAL_KEY) {
+      return res.status(503).json({ message: "FAL_KEY is not configured." });
     }
 
     // Map orientation to aspect ratio if not explicitly set by frontend
@@ -1129,16 +1129,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({ message: "prompt is required" });
     }
-    const falKeyMissing = !process.env.FAL_KEY;
-    const ideogramKeyMissing = !process.env.IDEOGRAM_API_KEY;
-    if (falKeyMissing && output_type !== "image") {
-      return res.status(503).json({ message: "FAL_KEY is not configured. Add it to Replit Secrets." });
-    }
-    if (falKeyMissing && output_type === "image" && !requiresTextRendering(prompt)) {
-      return res.status(503).json({ message: "FAL_KEY is not configured. Add it to Replit Secrets." });
-    }
-    if (ideogramKeyMissing && output_type === "image" && requiresTextRendering(prompt)) {
-      return res.status(503).json({ message: "IDEOGRAM_API_KEY is not configured. Add it to Replit Secrets." });
+    if (!process.env.FAL_KEY) {
+      return res.status(503).json({ message: "FAL_KEY is not configured." });
     }
     try {
       const result = await generateCreative(prompt, output_type, reference_image_url);
@@ -1154,9 +1146,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       return res.json(entry);
     } catch (err: any) {
-      // Handle both @fal-ai/client SDK errors (err.status, err.body) and axios errors (err.response.status, err.response.data)
-      const status = err?.status ?? err?.response?.status;
-      const body = err?.body ?? err?.response?.data;
+      const status = err?.status;
+      const body = err?.body;
       const detail = body?.detail || body?.message || err?.message || "Generation failed";
       console.error("[AI Studio] generate error:", status, detail);
       if (status === 403 || detail.toLowerCase().includes("exhausted") || detail.toLowerCase().includes("balance") || detail.toLowerCase().includes("locked") || detail.toLowerCase().includes("forbidden")) {
@@ -1200,10 +1191,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ── AI Content Studio: simple 4-variation generation ───────────
   app.post("/api/ai/generate", async (req: Request, res: Response) => {
     try {
-      const { prompt, orientation, aspectRatio, model } = req.body || {};
-      console.log('[AI GENERATE] model:', model, 'prompt:', prompt.substring(0, 50))
+      const { prompt, aspectRatio, model } = req.body || {};
       if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
         return res.status(400).json({ error: "Prompt is required" });
+      }
+      console.log('[AI GENERATE] model:', model, 'prompt:', prompt.substring(0, 50));
+      if (!process.env.FAL_KEY) {
+        return res.status(500).json({ error: "FAL_KEY not configured" });
       }
 
       const variations = [
@@ -1213,77 +1207,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { suffix: ", close-up detail shot, premium materials, minimalist composition", label: "Option 4: Interior Luxury" },
       ];
 
-      if (model === "ideogram") {
-        // Ideogram v2 Turbo via fal.ai
-        if (!process.env.FAL_KEY) {
-          return res.status(500).json({ error: "FAL_KEY not configured" });
-        }
-
-        const results = await Promise.all(
-          variations.map(async (v) => {
-            const variationPrompt = prompt + v.suffix;
-            const response = await fetch('https://fal.run/fal-ai/ideogram/v2/turbo', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Key ${process.env.FAL_KEY}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                prompt: variationPrompt,
-                aspect_ratio: aspectRatio === '9:16' ? 'ASPECT_9_16' : aspectRatio === '1:1' ? 'ASPECT_1_1' : 'ASPECT_16_9',
-                style: 'REALISTIC',
-                num_images: 1,
-                magic_prompt_option: 'AUTO'
-              })
-            })
-            const data = await response.json()
-            console.log('[IDEOGRAM] response:', JSON.stringify(data).substring(0, 200))
-            const url = data?.images?.[0]?.url
-            if (!url) throw new Error('No image returned from Ideogram: ' + JSON.stringify(data))
-            return { url, label: v.label }
-          })
-        );
-
-        return res.json({ images: results });
-      }
-
-      // Default: FLUX.1 Pro via fal.ai
-      if (!process.env.FAL_KEY) {
-        return res.status(500).json({ error: "FAL_KEY not configured" });
-      }
-
-      const imageSize = orientation === "Portrait" ? "portrait_16_9" : "landscape_16_9";
+      const resolvedAspect = aspectRatio || "16:9";
+      const useIdeogram = model === "ideogram";
+      const modelName = useIdeogram ? "ideogram-v2-turbo" : "flux-pro";
 
       const results = await Promise.all(
         variations.map(async (v) => {
-          const response = await fetch("https://fal.run/fal-ai/flux/dev", {
-            method: "POST",
-            headers: {
-              "Authorization": `Key ${process.env.FAL_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              prompt: prompt + v.suffix,
-              num_images: 1,
-              image_size: imageSize,
-              num_inference_steps: 28,
-              guidance_scale: 3.5,
-            }),
-          });
-          if (!response.ok) {
-            const text = await response.text();
-            throw new Error(`fal.ai ${response.status}: ${text}`);
-          }
-          const data: any = await response.json();
-          const url = data?.images?.[0]?.url;
-          if (!url) throw new Error("No image returned from fal.ai");
-          return { url, label: v.label };
+          const variationPrompt = prompt + v.suffix;
+          const result = useIdeogram
+            ? await generateWithIdeogram(variationPrompt, resolvedAspect)
+            : await generateWithFluxPro(variationPrompt);
+          return { url: result.mediaUrl, label: v.label };
         })
       );
 
-      return res.json({ images: results });
+      return res.json({ images: results, model: modelName });
     } catch (err: any) {
-      return res.status(500).json({ error: err?.message || "Generation failed" });
+      const status = err?.status ?? err?.response?.status;
+      const body = err?.body ?? err?.response?.data;
+      const detail = body?.detail || body?.message || err?.message || "Generation failed";
+      console.error("[AI GENERATE] error:", status, detail);
+      if (status === 403 || detail.toLowerCase().includes("exhausted") || detail.toLowerCase().includes("balance") || detail.toLowerCase().includes("forbidden")) {
+        return res.status(402).json({ error: "fal.ai account balance exhausted. Top up at fal.ai/dashboard/billing." });
+      }
+      if (status === 401 || detail.toLowerCase().includes("unauthorized")) {
+        return res.status(401).json({ error: "fal.ai API key is invalid. Check your FAL_KEY secret." });
+      }
+      return res.status(500).json({ error: detail });
     }
   });
 

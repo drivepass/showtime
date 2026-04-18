@@ -32,6 +32,7 @@ export default function AIStudio() {
 
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<GeneratedImage[] | null>(null);
+  const [resultModel, setResultModel] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [downloadingIdx, setDownloadingIdx] = useState<number | null>(null);
@@ -59,6 +60,7 @@ export default function AIStudio() {
       if (!res.ok) throw new Error(`Generation failed (${res.status})`);
       const data = await res.json();
       setResults(data.images || []);
+      setResultModel(data.model || null);
     } catch (e: any) {
       setError(e?.message || "Generation failed");
     } finally {
