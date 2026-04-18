@@ -1189,9 +1189,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/aistudio/publish", async (req: Request, res: Response) => {
+    console.log("[AISTUDIO/PUBLISH] incoming request body:", {
+      imageUrl: req.body?.imageUrl,
+      filename: req.body?.filename,
+      prompt: req.body?.prompt,
+    });
+
     if (!req.session.navoriToken) {
+      console.log("[AISTUDIO/PUBLISH] token check: MISSING navoriToken on session");
       return res.status(401).json({ message: "Not authenticated" });
     }
+    console.log("[AISTUDIO/PUBLISH] token check: OK, length =", req.session.navoriToken.length);
 
     const { imageUrl, filename, prompt } = req.body || {};
     if (typeof imageUrl !== "string" || !imageUrl.trim()) {
@@ -1203,11 +1211,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const imgResp = await fetch(imageUrl);
+      console.log("[AISTUDIO/PUBLISH] fal.ai fetch status:", imgResp.status, "content-type:", imgResp.headers.get("content-type"));
       if (!imgResp.ok) {
         return res.status(502).json({ message: `Unable to fetch source image (${imgResp.status})` });
       }
       const imgBuf = Buffer.from(await imgResp.arrayBuffer());
       const mime = imgResp.headers.get("content-type") || "image/jpeg";
+      console.log("[AISTUDIO/PUBLISH] image buffer bytes:", imgBuf.length, "resolved mime:", mime);
 
       const rawName = (typeof filename === "string" && filename.trim())
         ? filename
@@ -1225,8 +1235,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         Buffer.from(`\r\n--${boundary}--\r\n`),
       ]);
       const contentType = `multipart/form-data; boundary=${boundary}`;
+      console.log("[AISTUDIO/PUBLISH] multipart prepared:", {
+        safeName,
+        boundary,
+        multipartBodyBytes: multipartBody.length,
+        contentType,
+      });
 
       const result = await navoriUploadFile(req.session.navoriToken!, multipartBody, contentType);
+      console.log("[AISTUDIO/PUBLISH] navoriUploadFile result:", JSON.stringify({
+        success: result.success,
+        media: result.media,
+        error: result.error,
+      }, null, 2));
 
       // Guard against the silent-failure bug in navoriUploadFile: Navori can return
       // HTTP 200 with { Status: "INTERNAL_SERVER_ERROR" } and the wrapper treats it

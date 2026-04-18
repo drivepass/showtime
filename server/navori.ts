@@ -764,6 +764,9 @@ export async function navoriUploadFile(token: string, body: Buffer, contentType:
     data = { Status: response.ok ? "SUCCESS" : "FAILED" };
   }
 
+  console.log("[NAVORI/UPLOAD] response.status:", response.status, "response.statusText:", response.statusText);
+  console.log("[NAVORI/UPLOAD] raw body:", JSON.stringify(data, null, 2));
+
   if (data.Status === "SUCCESS" || response.ok) {
     return { success: true, media: data.Media || data };
   }
