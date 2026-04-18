@@ -1188,6 +1188,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.json({ history: getHistory() });
   });
 
+  app.post("/api/aistudio/publish", async (req: Request, res: Response) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { imageUrl, filename, prompt } = req.body || {};
+    if (typeof imageUrl !== "string" || !imageUrl.trim()) {
+      return res.status(400).json({ message: "imageUrl is required" });
+    }
+    if (!/^https?:\/\//i.test(imageUrl)) {
+      return res.status(400).json({ message: "imageUrl must be an http(s) URL" });
+    }
+
+    try {
+      const imgResp = await fetch(imageUrl);
+      if (!imgResp.ok) {
+        return res.status(502).json({ message: `Unable to fetch source image (${imgResp.status})` });
+      }
+      const imgBuf = Buffer.from(await imgResp.arrayBuffer());
+      const mime = imgResp.headers.get("content-type") || "image/jpeg";
+
+      const rawName = (typeof filename === "string" && filename.trim())
+        ? filename
+        : `aistudio-${Date.now()}.jpg`;
+      const safeName = rawName.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120);
+
+      const boundary = "----ShowtimeBoundary" + crypto.randomBytes(8).toString("hex");
+      const multipartBody = Buffer.concat([
+        Buffer.from(
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="file"; filename="${safeName}"\r\n` +
+          `Content-Type: ${mime}\r\n\r\n`
+        ),
+        imgBuf,
+        Buffer.from(`\r\n--${boundary}--\r\n`),
+      ]);
+      const contentType = `multipart/form-data; boundary=${boundary}`;
+
+      const result = await navoriUploadFile(req.session.navoriToken!, multipartBody, contentType);
+
+      // Guard against the silent-failure bug in navoriUploadFile: Navori can return
+      // HTTP 200 with { Status: "INTERNAL_SERVER_ERROR" } and the wrapper treats it
+      // as success via `|| response.ok`. On a real success, result.media is the inner
+      // Media object (no Status field). On the silent failure, result.media === the
+      // whole body, which DOES carry a Status field that is not "SUCCESS". So we
+      // reject anything that exposes a non-SUCCESS Status.
+      const navoriStatus: string | undefined = result.media?.Status;
+      const reallyFailed = !result.success || (typeof navoriStatus === "string" && navoriStatus !== "SUCCESS");
+
+      if (reallyFailed) {
+        if (result.error === "NOT_AUTHORIZED") {
+          return handleExpiredToken(req, res);
+        }
+        return res.status(502).json({
+          error: "Navori upload failed",
+          navoriStatus: navoriStatus || result.error || "UNKNOWN",
+        });
+      }
+
+      void prompt;
+      return res.json({ success: true, media: result.media, filename: safeName });
+    } catch (err: any) {
+      console.error("[AI STUDIO PUBLISH] error:", err?.message || err);
+      return res.status(502).json({ message: "Unable to reach Navori API" });
+    }
+  });
+
   // ── AI Content Studio: simple 4-variation generation ───────────
   app.post("/api/ai/generate", async (req: Request, res: Response) => {
     try {

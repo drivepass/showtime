@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { API_BASE } from "@/lib/queryClient";
-
-type Group = { Id: number | string; Name: string };
 
 type GeneratedImage = { url: string; label: string };
 
@@ -19,8 +17,6 @@ const RESOLUTIONS = ["1920×1080", "3840×2160", "1280×720"];
 const ASPECTS = ["16:9", "9:16", "1:1"];
 
 export default function AIStudio() {
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [targetGroup, setTargetGroup] = useState("");
   const [prompt, setPrompt] = useState("");
   const [configOpen, setConfigOpen] = useState(false);
   const [contentType, setContentType] = useState("Static");
@@ -36,13 +32,36 @@ export default function AIStudio() {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [downloadingIdx, setDownloadingIdx] = useState<number | null>(null);
+  const [uploadState, setUploadState] = useState<"idle" | "uploading" | "success" | "error">("idle");
+  const [uploadError, setUploadError] = useState<string>("");
 
-  useEffect(() => {
-    fetch(API_BASE + "/api/groups", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : { groups: [] }))
-      .then((d) => setGroups(d.groups || []))
-      .catch(() => setGroups([]));
-  }, []);
+  const saveToNavori = async () => {
+    if (selectedIdx === null || !results?.[selectedIdx]) return;
+    const imageUrl = results[selectedIdx].url;
+    setUploadState("uploading");
+    setUploadError("");
+    try {
+      const res = await fetch(API_BASE + "/api/aistudio/publish", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl, prompt: prompt || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const status = data?.navoriStatus;
+        const msg = status
+          ? `Navori upload failed (${status}). Please try again or contact support.`
+          : (data?.message || data?.error || `Upload failed (${res.status})`);
+        throw new Error(msg);
+      }
+      setUploadState("success");
+      setTimeout(() => setUploadState("idle"), 3000);
+    } catch (e: any) {
+      setUploadError(e?.message || "Upload failed");
+      setUploadState("error");
+    }
+  };
 
   const generate = async () => {
     if (!prompt.trim()) return;
@@ -131,23 +150,6 @@ export default function AIStudio() {
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "32px" }}>
         {/* INPUT */}
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: "#374151", marginBottom: 6 }}>
-            TARGET SCREEN
-          </label>
-          <select
-            value={targetGroup}
-            onChange={(e) => setTargetGroup(e.target.value)}
-            style={{
-              width: "100%", padding: "10px 12px", fontSize: 14,
-              border: "1px solid #d1d5db", borderRadius: 8, background: "#fff", marginBottom: 16,
-            }}
-          >
-            <option value="">Select a Player or Group...</option>
-            {groups.map((g) => (
-              <option key={String(g.Id)} value={String(g.Id)}>{g.Name}</option>
-            ))}
-          </select>
-
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -355,17 +357,37 @@ export default function AIStudio() {
                 </div>
 
                 {selectedIdx !== null && (
-                  <button
-                    onClick={() => alert('Download the image first, then upload it manually in your Navori media library via Launch Platform.')}
-                    style={{
-                      width: "100%", marginTop: 20,
-                      background: "#1A91E2", color: "#fff",
-                      fontWeight: 700, fontSize: 15, padding: "12px 16px",
-                      border: "none", borderRadius: 8, cursor: "pointer",
-                    }}
-                  >
-                    Save & Publish to Navori
-                  </button>
+                  <div style={{ marginTop: 20 }}>
+                    <button
+                      onClick={saveToNavori}
+                      disabled={uploadState === "uploading" || uploadState === "success"}
+                      style={{
+                        width: "100%",
+                        background: uploadState === "success" ? "#16a34a" : "#1A91E2",
+                        color: "#fff",
+                        fontWeight: 700, fontSize: 15, padding: "12px 16px",
+                        border: "none", borderRadius: 8,
+                        cursor: uploadState === "uploading" || uploadState === "success" ? "not-allowed" : "pointer",
+                        opacity: uploadState === "uploading" ? 0.75 : 1,
+                        transition: "background 0.2s",
+                      }}
+                    >
+                      {uploadState === "uploading" && "Uploading to Navori..."}
+                      {uploadState === "success" && "Saved to Navori ✓"}
+                      {(uploadState === "idle" || uploadState === "error") && "Save to Navori Library"}
+                    </button>
+                    <div style={{ minHeight: 34, marginTop: 8 }}>
+                      {uploadState === "error" ? (
+                        <div style={{ fontSize: 12, color: "#b91c1c" }}>
+                          {uploadError}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: "#6b7280" }}>
+                          Uploads to your Navori media library. Build playlists manually in Navori via Launch Platform.
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </>
             )}
