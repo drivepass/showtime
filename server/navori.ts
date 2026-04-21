@@ -790,7 +790,7 @@ export async function navoriUploadFile(
   return { success: false, error: data.Status || "Upload failed" };
 }
 
-const NAVORI_UPLOAD_CHUNK_LIMIT = 1_048_576;
+const NAVORI_UPLOAD_CHUNK_LIMIT = 5 * 1024 * 1024;
 
 export async function navoriUploadMedia(
   token: string,
@@ -811,7 +811,7 @@ export async function navoriUploadMedia(
   // server-returned FileName and must be sent serially, not in parallel.
   if (fileSize > NAVORI_UPLOAD_CHUNK_LIMIT) {
     console.log("[NAVORI/UPLOAD-V2] file too large for single-chunk v1:", fileSize);
-    return { success: false, error: "Files larger than 1 MB not yet supported — chunking pending" };
+    return { success: false, error: "Files larger than 5 MB not yet supported — chunking pending" };
   }
 
   const uploadUrl = `${NAVORI_QL_URL}UploadFileMedia`;

@@ -4,6 +4,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
 import crypto from "crypto";
+import sharp from "sharp";
 import { navoriLogin, navoriGetGroups, navoriGetPlayers, navoriGetPlayersById, navoriGetFolders, navoriGetMedias, navoriGetMediasById, navoriGetTemplates, navoriGetTemplatesById, navoriGetPlaylists, navoriGetPlaylistsById, navoriSetPlaylists, navoriSetPlaylistContents, navoriGetPlaylistContents, navoriGetContentWindow, navoriGetTimeSlots, navoriSetTimeSlots, navoriDeleteTimeSlots } from "./navori";
 import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport, navoriUploadFile, navoriUploadMedia } from "./navori";
 
@@ -1223,14 +1224,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(502).json({ message: `Unable to fetch source image (${imgResp.status})` });
       }
       const imgBuf = Buffer.from(await imgResp.arrayBuffer());
-      const mime = imgResp.headers.get("content-type") || "image/jpeg";
-      console.log("[AISTUDIO/PUBLISH] image buffer bytes:", imgBuf.length, "resolved mime:", mime);
+      const headerMime = (imgResp.headers.get("content-type") || "").toLowerCase().split(";")[0].trim();
+      const isPngMagic = imgBuf.length >= 4 && imgBuf[0] === 0x89 && imgBuf[1] === 0x50 && imgBuf[2] === 0x4e && imgBuf[3] === 0x47;
+      const resolvedMime = headerMime || (isPngMagic ? "image/png" : "image/jpeg");
+      console.log("[AISTUDIO/PUBLISH] image buffer bytes:", imgBuf.length, "resolved mime:", resolvedMime, "pngMagic:", isPngMagic);
+
+      let finalBuffer = imgBuf;
+      const finalExt = "jpg";
+
+      if (resolvedMime === "image/png" || isPngMagic) {
+        finalBuffer = await sharp(imgBuf).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+        console.log("[AISTUDIO/PUBLISH] converted PNG to JPG:", {
+          originalBytes: imgBuf.length,
+          convertedBytes: finalBuffer.length,
+        });
+      } else if (resolvedMime !== "image/jpeg" && resolvedMime !== "image/jpg") {
+        return res.status(400).json({ error: `Unsupported image format: ${resolvedMime}` });
+      }
+      console.log("[AISTUDIO/PUBLISH] final buffer bytes:", finalBuffer.length);
 
       const rawName = (typeof filename === "string" && filename.trim())
-        ? filename
-        : `aistudio-${Date.now()}.jpg`;
+        ? filename.replace(/\.(png|jpeg|jpg)$/i, `.${finalExt}`)
+        : `aistudio-${Date.now()}.${finalExt}`;
       const safeName = rawName.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120);
-      void mime;
 
       // TODO: make GroupId configurable per dealership. Currently uploads
       // land in a single shared folder. When multi-tenant onboarding ships,
@@ -1246,7 +1262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const result = await navoriUploadMedia(
         req.session.navoriToken!,
-        imgBuf,
+        finalBuffer,
         safeName,
         DEFAULT_GROUP_ID,
         displayName,
