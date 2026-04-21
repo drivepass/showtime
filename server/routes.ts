@@ -1196,6 +1196,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.json({ history: getHistory() });
   });
 
+  // ── AI Studio diagnostic probe (removable) ─────────────────────
+  // Triangulates NOT_CONNECTED during UploadFileMedia by exercising
+  // REST /api/, QLService GetContentWindow, and a 1x1 UploadFileMedia
+  // against the same session token. Safe to delete once diagnosed.
+  app.get("/api/aistudio/probe", async (req: Request, res: Response) => {
+    if (!req.session.navoriToken) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    const token = req.session.navoriToken;
+    const NAVORI_QL_URL = "https://saas.navori.com/NavoriService/QLService/";
+
+    // Probe A: REST baseline via GetGroups
+    let probeA: { ok: boolean; groupsReturned: number; firstGroupIds: any[]; error?: string };
+    try {
+      const r = await navoriGetGroups(token);
+      if (r.success && Array.isArray(r.groups)) {
+        probeA = {
+          ok: true,
+          groupsReturned: r.groups.length,
+          firstGroupIds: r.groups.slice(0, 3).map((g: any) => g?.Id),
+        };
+      } else {
+        probeA = { ok: false, groupsReturned: 0, firstGroupIds: [], error: r.error };
+      }
+    } catch (err: any) {
+      probeA = { ok: false, groupsReturned: 0, firstGroupIds: [], error: err?.message || String(err) };
+    }
+    console.log("[PROBE A]", JSON.stringify(probeA));
+
+    // Probe B: QLService reachability via GetContentWindow (minimal body)
+    let probeB: { ok: boolean; status: string; rawResponse: any };
+    try {
+      const resp = await fetch(`${NAVORI_QL_URL}GetContentWindow`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          "Token": token,
+        },
+        body: JSON.stringify({ GroupId: DEFAULT_GROUP_ID }),
+      });
+      let body: any;
+      try {
+        body = await resp.json();
+      } catch {
+        try { body = await resp.text(); } catch { body = null; }
+      }
+      probeB = {
+        ok: resp.ok && body?.Status === "SUCCESS",
+        status: `HTTP ${resp.status} ${resp.statusText}${body?.Status ? ` (Navori: ${body.Status})` : ""}`,
+        rawResponse: body,
+      };
+    } catch (err: any) {
+      probeB = { ok: false, status: "FETCH_ERROR", rawResponse: { error: err?.message || String(err) } };
+    }
+    console.log("[PROBE B]", JSON.stringify(probeB).slice(0, 2000));
+
+    // Probe C: smallest possible UploadFileMedia (1x1 JPG)
+    let probeC: { ok: boolean; status: string; rawResponse: any };
+    try {
+      const tinyJpg = await sharp({
+        create: { width: 1, height: 1, channels: 3, background: { r: 255, g: 255, b: 255 } },
+      })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+      const base64Buffer = tinyJpg.toString("base64");
+      const resp = await fetch(`${NAVORI_QL_URL}UploadFileMedia`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Accept": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          "Token": token,
+        },
+        body: JSON.stringify({
+          FileName: "probe-test.jpg",
+          GroupId: DEFAULT_GROUP_ID,
+          Offset: 0,
+          FileSize: tinyJpg.length,
+          Buffer: base64Buffer,
+        }),
+      });
+      let body: any;
+      try {
+        body = await resp.json();
+      } catch {
+        try { body = await resp.text(); } catch { body = null; }
+      }
+      probeC = {
+        ok: resp.ok && body?.Status === "SUCCESS",
+        status: `HTTP ${resp.status} ${resp.statusText}${body?.Status ? ` (Navori: ${body.Status})` : ""}`,
+        rawResponse: body,
+      };
+    } catch (err: any) {
+      probeC = { ok: false, status: "FETCH_ERROR", rawResponse: { error: err?.message || String(err) } };
+    }
+    console.log("[PROBE C]", JSON.stringify(probeC).slice(0, 2000));
+
+    // Interpretation
+    const bStatus = probeB.rawResponse?.Status;
+    const cStatus = probeC.rawResponse?.Status;
+    let hypothesis: string;
+    if (!probeA.ok && !probeB.ok && !probeC.ok) {
+      hypothesis = "All three probes failed — different problem entirely (likely token/auth/network at the session level).";
+    } else if (probeA.ok && !probeB.ok && bStatus === "NOT_CONNECTED") {
+      hypothesis = "Hypothesis A likely: REST works but QLService returns NOT_CONNECTED. QLService appears to require a Connect / session-bind call before it will accept requests on this token.";
+    } else if (probeA.ok && probeB.ok && !probeC.ok && cStatus === "NOT_AUTHORIZED") {
+      hypothesis = `Hypothesis C likely: QLService is reachable and readable for GroupId ${DEFAULT_GROUP_ID}, but UploadFileMedia returns NOT_AUTHORIZED — write permission issue on this group for the authed user.`;
+    } else if (probeA.ok && probeB.ok && probeC.ok) {
+      hypothesis = "All probes pass — neither Connect nor group-write is the issue. Production failure is specific to the real upload flow (payload shape, filename, size, or SetContentProperties step).";
+    } else if (probeA.ok && probeB.ok && !probeC.ok) {
+      hypothesis = `QLService reads work but UploadFileMedia fails with ${cStatus || probeC.status}. Not a classic Connect or permission signature — inspect rawResponse for clues.`;
+    } else if (probeA.ok && !probeB.ok) {
+      hypothesis = `REST baseline works, but QLService GetContentWindow failed with ${bStatus || probeB.status}. QLService-level problem (routing, token format, or session-bind) — inspect rawResponse.`;
+    } else {
+      hypothesis = "Mixed results — inspect rawResponse fields for each probe to triage.";
+    }
+
+    return res.json({ probeA, probeB, probeC, hypothesis });
+  });
+
   app.post("/api/aistudio/publish", async (req: Request, res: Response) => {
     console.log("[AISTUDIO/PUBLISH] incoming request body:", {
       imageUrl: req.body?.imageUrl,
