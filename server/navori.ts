@@ -763,6 +763,7 @@ export async function navoriUploadFile(
       `&FilePath=${encodeURIComponent(filePath ?? "")}`;
   }
 
+  console.log("[NAVORI/UPLOAD] final URL:", url);
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -787,4 +788,123 @@ export async function navoriUploadFile(
   }
 
   return { success: false, error: data.Status || "Upload failed" };
+}
+
+const NAVORI_UPLOAD_CHUNK_LIMIT = 1_048_576;
+
+export async function navoriUploadMedia(
+  token: string,
+  fileBuffer: Buffer,
+  originalFilename: string,
+  groupId: number,
+  displayName?: string,
+): Promise<{
+  success: boolean;
+  mediaInfo?: { FileName: string; Path: string; URL: string; Length: number };
+  error?: string;
+  navoriStatus?: string;
+}> {
+  const fileSize = fileBuffer.length;
+
+  // TODO: implement multi-chunk upload before video / high-res files can be
+  // sent. Navori chunks at 1,048,577 bytes; subsequent chunks reuse the
+  // server-returned FileName and must be sent serially, not in parallel.
+  if (fileSize > NAVORI_UPLOAD_CHUNK_LIMIT) {
+    console.log("[NAVORI/UPLOAD-V2] file too large for single-chunk v1:", fileSize);
+    return { success: false, error: "Files larger than 1 MB not yet supported — chunking pending" };
+  }
+
+  const uploadUrl = `${NAVORI_QL_URL}UploadFileMedia`;
+  const base64Buffer = fileBuffer.toString("base64");
+  const uploadBody = {
+    FileName: originalFilename,
+    GroupId: groupId,
+    Offset: 0,
+    FileSize: fileSize,
+    Buffer: base64Buffer,
+  };
+  const redactedBody = { ...uploadBody, Buffer: `<base64 ${base64Buffer.length} chars>` };
+
+  const uploadResp = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Accept": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+      "Token": token,
+    },
+    body: JSON.stringify(uploadBody),
+  });
+
+  let uploadData: any;
+  try {
+    uploadData = await uploadResp.json();
+  } catch {
+    uploadData = null;
+  }
+  console.log(
+    "[NAVORI/UPLOAD-V2] response:",
+    "url=", uploadUrl,
+    "status=", uploadResp.status, uploadResp.statusText,
+    "req=", JSON.stringify(redactedBody),
+    "resp=", JSON.stringify(uploadData),
+  );
+
+  if (!uploadResp.ok || !uploadData || uploadData.Status !== "SUCCESS" || uploadData.Offset !== fileSize) {
+    return {
+      success: false,
+      navoriStatus: uploadData?.Status,
+      error: uploadData?.Status || `HTTP ${uploadResp.status}`,
+    };
+  }
+
+  const mediaInfo = uploadData.MediaInfo || {};
+  const propsUrl = `${NAVORI_QL_URL}SetContentProperties`;
+  const propsBody = {
+    Path: mediaInfo.Path,
+    Name: displayName || originalFilename,
+    Duration: 7000,
+  };
+
+  try {
+    const propsResp = await fetch(propsUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Accept": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "Token": token,
+      },
+      body: JSON.stringify(propsBody),
+    });
+    let propsData: any;
+    try {
+      propsData = await propsResp.json();
+    } catch {
+      propsData = null;
+    }
+    console.log(
+      "[NAVORI/SETPROPS] response:",
+      "url=", propsUrl,
+      "status=", propsResp.status, propsResp.statusText,
+      "req=", JSON.stringify(propsBody),
+      "resp=", JSON.stringify(propsData),
+    );
+    if (!propsResp.ok || !propsData || propsData.Status !== "SUCCESS") {
+      console.warn("[NAVORI/SETPROPS] registration failed — upload succeeded, returning success anyway");
+    }
+  } catch (err: any) {
+    console.warn("[NAVORI/SETPROPS] threw:", err?.message || err, "— upload succeeded, returning success anyway");
+  }
+
+  return {
+    success: true,
+    navoriStatus: uploadData.Status,
+    mediaInfo: {
+      FileName: mediaInfo.FileName || uploadData.FileName,
+      Path: mediaInfo.Path,
+      URL: mediaInfo.URL,
+      Length: mediaInfo.Length ?? fileSize,
+    },
+  };
 }

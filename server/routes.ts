@@ -5,7 +5,14 @@ import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
 import crypto from "crypto";
 import { navoriLogin, navoriGetGroups, navoriGetPlayers, navoriGetPlayersById, navoriGetFolders, navoriGetMedias, navoriGetMediasById, navoriGetTemplates, navoriGetTemplatesById, navoriGetPlaylists, navoriGetPlaylistsById, navoriSetPlaylists, navoriSetPlaylistContents, navoriGetPlaylistContents, navoriGetContentWindow, navoriGetTimeSlots, navoriSetTimeSlots, navoriDeleteTimeSlots } from "./navori";
-import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport, navoriUploadFile } from "./navori";
+import { navoriSetMedias, navoriCopyMedias, navoriDeleteMedias, navoriSetTemplates, navoriCopyTemplates, navoriDeleteTemplates, navoriPublishContent, navoriTriggerContent, navoriRemoteSettings, navoriGetContentReport, navoriGetAudienceReport, navoriUploadFile, navoriUploadMedia } from "./navori";
+
+// TODO: make GroupId configurable per dealership. Currently uploads land in
+// the "Professional" folder for the Sajid account only. When multi-tenant
+// onboarding ships, this must be set per-dealership (Mitsubishi folder, KIA
+// folder, etc). Likely source: dealership settings table + a
+// "navori_group_id" column populated during onboarding.
+const DEFAULT_GROUP_ID = 138699;
 import { generateCreative, generateWithFluxPro, generateWithIdeogram, pollVideoResult, addGeneration, updateGeneration, getHistory, requiresTextRendering } from "./aiStudio";
 
 const CIPHER_ALGO = "aes-256-gcm";
@@ -1223,53 +1230,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? filename
         : `aistudio-${Date.now()}.jpg`;
       const safeName = rawName.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120);
+      void mime;
 
-      const boundary = "----ShowtimeBoundary" + crypto.randomBytes(8).toString("hex");
-      const multipartBody = Buffer.concat([
-        Buffer.from(
-          `--${boundary}\r\n` +
-          `Content-Disposition: form-data; name="file"; filename="${safeName}"\r\n` +
-          `Content-Type: ${mime}\r\n\r\n`
-        ),
-        imgBuf,
-        Buffer.from(`\r\n--${boundary}--\r\n`),
-      ]);
-      const contentType = `multipart/form-data; boundary=${boundary}`;
-      console.log("[AISTUDIO/PUBLISH] multipart prepared:", {
+      // TODO: make GroupId configurable per dealership. Currently uploads
+      // land in a single shared folder. When multi-tenant onboarding ships,
+      // set this per-dealership (Mitsubishi folder, KIA folder, etc).
+      // Add a navori_group_id column to the dealerships/users table.
+      const promptText = (typeof prompt === "string" && prompt.trim()) ? prompt.trim() : "Untitled";
+      const displayName = `AI Studio — ${promptText.substring(0, 60)}`;
+      console.log("[AISTUDIO/PUBLISH] calling navoriUploadMedia:", {
         safeName,
-        boundary,
-        multipartBodyBytes: multipartBody.length,
-        contentType,
+        groupId: DEFAULT_GROUP_ID,
+        displayName,
       });
 
-      const result = await navoriUploadFile(req.session.navoriToken!, multipartBody, contentType, safeName, 0, "");
-      console.log("[AISTUDIO/PUBLISH] navoriUploadFile result:", JSON.stringify({
-        success: result.success,
-        media: result.media,
-        error: result.error,
-      }, null, 2));
+      const result = await navoriUploadMedia(
+        req.session.navoriToken!,
+        imgBuf,
+        safeName,
+        DEFAULT_GROUP_ID,
+        displayName,
+      );
+      console.log("[AISTUDIO/PUBLISH] navoriUploadMedia result:", JSON.stringify(result, null, 2));
 
-      // Guard against the silent-failure bug in navoriUploadFile: Navori can return
-      // HTTP 200 with { Status: "INTERNAL_SERVER_ERROR" } and the wrapper treats it
-      // as success via `|| response.ok`. On a real success, result.media is the inner
-      // Media object (no Status field). On the silent failure, result.media === the
-      // whole body, which DOES carry a Status field that is not "SUCCESS". So we
-      // reject anything that exposes a non-SUCCESS Status.
-      const navoriStatus: string | undefined = result.media?.Status;
-      const reallyFailed = !result.success || (typeof navoriStatus === "string" && navoriStatus !== "SUCCESS");
-
-      if (reallyFailed) {
-        if (result.error === "NOT_AUTHORIZED") {
+      if (!result.success) {
+        if (result.error === "NOT_AUTHORIZED" || result.navoriStatus === "NOT_AUTHORIZED") {
           return handleExpiredToken(req, res);
         }
         return res.status(502).json({
-          error: "Navori upload failed",
-          navoriStatus: navoriStatus || result.error || "UNKNOWN",
+          error: result.error || "Navori upload failed",
+          navoriStatus: result.navoriStatus ?? "UNKNOWN",
         });
       }
 
-      void prompt;
-      return res.json({ success: true, media: result.media, filename: safeName });
+      return res.json({
+        success: true,
+        mediaInfo: result.mediaInfo,
+        filename: result.mediaInfo?.FileName,
+      });
     } catch (err: any) {
       console.error("[AI STUDIO PUBLISH] error:", err?.message || err);
       return res.status(502).json({ message: "Unable to reach Navori API" });
