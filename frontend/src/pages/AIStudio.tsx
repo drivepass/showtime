@@ -4,10 +4,10 @@ import { API_BASE } from "@/lib/queryClient";
 type GeneratedImage = { url: string; label: string };
 
 const QUICK_STARTS = [
-  { icon: "🚗", label: "New Inventory", prompt: "A premium promotional slide showcasing our newest vehicle inventory, sleek modern design with dealership branding" },
-  { icon: "🔧", label: "Service Specials", prompt: "An eye-catching service specials promotion for oil changes, tire rotations and seasonal maintenance offers" },
-  { icon: "💰", label: "Finance Offers", prompt: "A bold finance offer slide featuring 0% APR financing, trade-in bonuses, and monthly payment highlights" },
-  { icon: "🏁", label: "Test Drive Promo", prompt: "A dynamic test drive invitation slide with motion blur, open road imagery and a strong call to action" },
+  { iconBase: "new-inventory", label: "New Inventory", prompt: "A premium promotional slide showcasing our newest vehicle inventory, sleek modern design with dealership branding" },
+  { iconBase: "service", label: "Service Specials", prompt: "An eye-catching service specials promotion for oil changes, tire rotations and seasonal maintenance offers" },
+  { iconBase: "finance", label: "Finance Offers", prompt: "A bold finance offer slide featuring 0% APR financing, trade-in bonuses, and monthly payment highlights" },
+  { iconBase: "test-drive", label: "Test Drive Promo", prompt: "A dynamic test drive invitation slide with motion blur, open road imagery and a strong call to action" },
 ];
 
 const CONTENT_TYPES = ["Static", "Video"];
@@ -34,6 +34,7 @@ export default function AIStudio() {
   const [downloadingIdx, setDownloadingIdx] = useState<number | null>(null);
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "success" | "error">("idle");
   const [uploadError, setUploadError] = useState<string>("");
+  const [hoveredQuickStart, setHoveredQuickStart] = useState<number | null>(null);
 
   const saveToNavori = async () => {
     if (selectedIdx === null || !results?.[selectedIdx]) return;
@@ -138,10 +139,32 @@ export default function AIStudio() {
       {/* QUICK STARTS */}
       <div style={{ padding: "14px 32px", borderBottom: "1px solid #f3f4f6", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "#6b7280" }}>QUICK STARTS:</span>
-        {QUICK_STARTS.map((q) => (
-          <button key={q.label} className="pill" onClick={() => setPrompt(q.prompt)}>
-            <span>{q.icon}</span>
-            <span>{q.label}</span>
+        {QUICK_STARTS.map((qs, idx) => (
+          <button
+            key={qs.label}
+            onMouseEnter={() => setHoveredQuickStart(idx)}
+            onMouseLeave={() => setHoveredQuickStart(null)}
+            onClick={() => setPrompt(qs.prompt)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 14px",
+              border: "1px solid #e5e7eb",
+              borderRadius: 999,
+              background: "#fff",
+              cursor: "pointer",
+              transition: "border-color 0.15s ease",
+            }}
+          >
+            <img
+              src={`/icons/${qs.iconBase}-${hoveredQuickStart === idx ? "blue" : "slate"}.svg`}
+              alt={qs.label}
+              style={{ width: 22, height: 22, objectFit: "contain" }}
+            />
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#374151" }}>
+              {qs.label}
+            </span>
           </button>
         ))}
       </div>
